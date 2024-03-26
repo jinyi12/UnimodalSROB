@@ -147,6 +147,7 @@ else
     l = r;
 end
 
+ghat = [];
 % if rhs contain polynomial terms
 if contains(modelform,'P')
     ghat = gen_poly(Xhat',p);

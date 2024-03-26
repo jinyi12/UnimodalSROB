@@ -25,7 +25,7 @@ T_end   = 1;            % final time
 K       = T_end/dt;     % num time steps
 
 % mus = 0.1:0.1:1.0; % diffusion coefficient
-mus = [0.5]; 
+mus = [0.5];
 u_ref = ones(K,1);
 IC = zeros(N,1);
 Mp = length(mus);  % number of parameter values
@@ -45,7 +45,7 @@ Usvd_all = cell(10,1);
 DS = 1;
 
 %% Operator inference parameters
-params.modelform = 'LQPI';           % model is linear-quadratic without input term
+params.modelform = 'LQI';           % model is linear-quadratic without input term
 params.modeltime = 'continuous';    % learn time-continuous model
 params.dt        = dt;              % timestep to compute state time deriv
 params.ddt_order = '1ex';           % explicit 1st order timestep scheme
@@ -80,15 +80,15 @@ for i = 1:length(mus)
     % % Intrusive operators
     rmax = max(r_vals);
     Vr = U_svd(:,1:rmax);
-    % Aint = Vr' * A * Vr;
-    % Bint = Vr' * B;
-    % Ln = elimat(N);  % elimination matrix of dim = N
-    % Dr = dupmat(max(r_vals));  % duplication matrix of dim = rmax
-    % Fint = Vr' * F * Ln * kron(Vr,Vr) * Dr;
-    % op_int.A = Aint; 
-    % op_int.B = Bint; 
-    % op_int.F = Fint;
-    % intop_all{i} = op_int;  % store the intrusive operator
+    Aint = Vr' * A * Vr;
+    Bint = Vr' * B;
+    Ln = elimat(N);  % elimination matrix of dim = N
+    Dr = dupmat(max(r_vals));  % duplication matrix of dim = rmax
+    Fint = Vr' * F * Ln * kron(Vr,Vr) * Dr;
+    op_int.A = Aint; 
+    op_int.B = Bint; 
+    op_int.F = Fint;
+    intop_all{i} = op_int;  % store the intrusive operator
     Usvd_all{i} = Vr;  % store the POD basis
     
     % Inferred operators with stability check
@@ -97,7 +97,6 @@ for i = 1:length(mus)
         Ahat = operators.A;
         Fhat = operators.F;
         Bhat = operators.B;
-        Phat = operators.P;
 
         % Check if the inferred operator is stable 
         lambda = eig(Ahat);
@@ -112,29 +111,29 @@ for i = 1:length(mus)
         end
     end
 
-    % %% For different basis sizes r, compute basis, learn model, and calculate state error 
-    % for j = 1:rmax
-    %     r = r_vals(j);
-    %     Vr = U_svd(:,1:r);
+    %% For different basis sizes r, compute basis, learn model, and calculate state error 
+    for j = 1:rmax
+        r = r_vals(j);
+        Vr = U_svd(:,1:r);
         
-    %     % Extract operators for inferred model
-    %     Fhat_extract = extractF(Fhat, r);
-    %     s_hat = semiImplicitEuler(Ahat(1:r,1:r),Fhat_extract,Bhat(1:r,:),dt,u_ref,Vr'*IC);
-    %     s_rec = Vr*s_hat;
-    %     err_inf(i,j) = norm(s_rec-s_ref,'fro')/norm(s_ref,'fro');
+        % Extract operators for inferred model
+        Fhat_extract = extractF(Fhat, r);
+        s_hat = semiImplicitEuler(Ahat(1:r,1:r),Fhat_extract,Bhat(1:r,:),dt,u_ref,Vr'*IC);
+        s_rec = Vr*s_hat;
+        err_inf(i,j) = norm(s_rec-s_ref,'fro')/norm(s_ref,'fro');
         
-    %     % Extract operators for intrusive model
-    %     Fint_extract = extractF(Fint, r);
-    %     s_int = semiImplicitEuler(Aint(1:r,1:r),Fint_extract,Bint(1:r,:),dt,u_ref,Vr'*IC);
-    %     s_tmp = Vr*s_int;
-    %     err_int(i,j) = norm(s_tmp-s_ref,'fro')/norm(s_ref,'fro');
-    % end
+        % Extract operators for intrusive model
+        Fint_extract = extractF(Fint, r);
+        s_int = semiImplicitEuler(Aint(1:r,1:r),Fint_extract,Bint(1:r,:),dt,u_ref,Vr'*IC);
+        s_tmp = Vr*s_int;
+        err_int(i,j) = norm(s_tmp-s_ref,'fro')/norm(s_ref,'fro');
+    end
 
     % test for single basis size r, compute basis, learn model and calculate state error
     r = rmax;
     Vr = U_svd(:, 1:r);
     Fhat_extract = extractF(Fhat, r);
-    s_hat = semiImplicitEuler_poly(Ahat(1:r, 1:r), Fhat_extract, Bhat(1:r,:), Phat, dt, u_ref, Vr'*IC);
+    s_hat = semiImplicitEuler(Ahat(1:r, 1:r), Fhat_extract, Bhat(1:r,:), dt, u_ref, Vr'*IC);
     s_rec = Vr*s_hat;
     err_inf_single = norm(s_rec - s_ref, 'fro')/norm(s_ref, 'fro');
 
@@ -176,41 +175,21 @@ end
 % end
 
 
-% Plot relative state error
+%% Plot relative state error
 err_inf_avg = median(err_inf(:,1:rmin));
 err_int_avg = median(err_int(:,1:rmin));
 
-% Save the error as log file
-log_file = fopen('burgers_inferred_model_error_training_poly.log', 'w');
-fprintf(log_file, 'r, err_inf_avg, err_int_avg\n');
-fprintf(log_file, '%d, %f, %f\n', r, err_inf_avg, err_int_avg);
-
-
-% calculate the error for each point
-recon_err = s_ref_all{i} - s_rec;
-
-% Plot the error
 figure(1); clf;
-s = surf(linspace(0.0,T_end,K+1),linspace(0.0,1.0,N),recon_err, ...
-    'FaceAlpha',0.8);
-s.EdgeColor = 'none';
-xlabel("t");
-ylabel("x");
-view(2);
-colorbar
-title("$Recon error for \mu$ = "+mus(i),'Interpreter', "latex")
-saveas(gcf, 'burgers_inferred_model_error_training_poly.png');
-
-
-% figure(1); clf;
-% semilogy(r_vals(1:rmin),err_inf_avg, 'o'); 
-% grid on; hold on;
-% semilogy(r_vals(1:rmin),err_int_avg, 'x'); 
-% hold off; legend('opinf', 'int', 'Location', 'southwest');
-% xlabel('reduced model dimension $r$', 'Interpreter', 'LaTeX')
-% ylabel('Relative state reconstruction error', 'Interpreter', 'LaTeX')
-% title('Burgers inferred model error (Training)', 'Interpreter', 'LaTeX')
-% saveas(gcf, 'burgers_inferred_model_error_training_poly.png');
+% give labels to the circle and x
+semilogy(r_vals(1:rmin),err_inf_avg, 'o', 'DisplayName', 'opinf');
+grid on; hold on;
+semilogy(r_vals(1:rmin),err_int_avg, 'x', 'DisplayName', 'int');
+hold off; legend('opinf', 'int', 'Location', 'southwest');
+legend
+xlabel('reduced model dimension $r$', 'Interpreter', 'LaTeX')
+ylabel('Relative state reconstruction error', 'Interpreter', 'LaTeX')
+title('Burgers inferred model error (Training)', 'Interpreter', 'LaTeX')
+saveas(gcf, 'burgers_inferred_model_error_training.png');
 
 %% Verify Full Models
 
@@ -225,8 +204,6 @@ for i = 1:Mp
     disp('liinspace 0 1')
     disp(size(linspace(0.0,1.0,N)));
     s = surf(linspace(0.0,T_end,K+1),linspace(0.0,1.0,N),s_ref_all{i});
-    view(2);
-    colorbar;
     set(s, 'FaceAlpha', 0.8, 'EdgeColor', 'none');
     xlabel('t');
     ylabel('x');
@@ -235,22 +212,4 @@ for i = 1:Mp
     saveas(gcf, 'burgers_reference_state_solution.png');
 end
 
-figure(3);
-
-% subplot(2, Mp/2, i);
-disp('s_ref_all');
-disp(size(s_rec));
-disp('linspace T_end')
-disp(size(linspace(0.0,T_end,K+1)));
-disp('liinspace 0 1')
-disp(size(linspace(0.0,1.0,N)));
-% 2D plot of inferred state
-s = surf(linspace(0.0,T_end,K+1),linspace(0.0,1.0,N),s_rec);
-view(2);
-colorbar;
-set(s, 'FaceAlpha', 0.8, 'EdgeColor', 'none');
-xlabel('t');
-ylabel('x');
-title(['$\mu$ = ', num2str(mus(i))], 'Interpreter', 'latex');
-% save the figure
-saveas(gcf, 'burgers_inferred_state_solution_poly.png');
+% plot

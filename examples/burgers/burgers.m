@@ -17,6 +17,8 @@
 
 clear; close all; clc;
 addpath('../../src/',"burgers-helpers/");
+datapath = '/data1/jy384/research/Data/UnimodalSROB/Burgers';
+addpath(datapath);
 
 %% Problem set-up
 N       = 2^7+1;        % num grid points
@@ -30,7 +32,7 @@ IC = zeros(N,1);
 Mp = 10;  % number of random inputs
 
 % POD basis size and operators
-r_vals = 1:15;
+r_vals = 1:4;
 err_inf = zeros(length(mus),length(r_vals));
 err_int = zeros(length(mus),length(r_vals));
 
@@ -40,6 +42,15 @@ infop_all = cell(Mp,1);
 intop_all = cell(Mp,1);
 Usvd_all = cell(10,1);
 
+% Vr_all = load('Vr_all.mat'); % all truncated POD basis of order r
+% Vr_all = Vr_all.Vr_all;
+
+% Initialize cell arrays to hold X and R for all mu
+X_all = cell(1, length(mus));
+R_all = cell(1, length(mus));
+% Initialize storage for the solution U
+U_all = zeros(K*Mp, length(mus));  % Adjusted size based on vectorization of U
+
 % Down-sampling
 DS = 1;
 
@@ -48,6 +59,7 @@ params.modelform = 'LQI';           % model is linear-quadratic with input term
 params.modeltime = 'continuous';    % learn time-continuous model
 params.dt        = dt;              % timestep to compute state time deriv
 params.ddt_order = '1ex';           % explicit 1st order timestep scheme
+params.p = 2;
 
 %% LEARN AND ANALYZE TRAINING DATA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 rmin = max(r_vals);
@@ -74,6 +86,12 @@ for i = 1:length(mus)
     U = U_rand(1:DS:end,:);  % down-sample
     U = U(:);  % vectorize
     [U_svd,~,~] = svd(X,'econ');  % take SVD for POD basis
+    % U_svd = Vr_all(:, :, i);  % Load the precomputed POD basis
+
+    % Store the X and R data for each mu
+    X_all{i} = X;
+    R_all{i} = R;
+    U_all(:, i) = U(:);  % Vectorize and store in the matrix for all mus
 
     % Intrusive operators
     rmax = max(r_vals);
@@ -133,31 +151,52 @@ for i = 1:length(mus)
     end
 end
 
+datapath = '/data1/jy384/research/Data/UnimodalSROB/Burgers';
+operators_path = fullfile(datapath, 'operators');
+save(fullfile(operators_path, 'infop_all.mat'), 'infop_all');
+
+% Save the computed U matrix to a file
+save('/data1/jy384/research/Data/UnimodalSROB/Burgers/U_all', 'U_all');
+
+% Save the reference solution to a file
+save('/data1/jy384/research/Data/UnimodalSROB/Burgers/s_ref_all', 's_ref_all');
+
+% Convert the cell arrays to 3D arrays and save to a .mat file
+% X_tensor = cat(3, X_all{:});
+% R_tensor = cat(3, R_all{:});
+
+save('/data1/jy384/research/Data/UnimodalSROB/Burgers/X_tensor', 'X_all');
+save('/data1/jy384/research/Data/UnimodalSROB/Burgers/R_tensor', 'R_all');
+
+
+
+disp('Saved data!')
+
 %% Plot relative state error
 err_inf_avg = median(err_inf(:,1:rmin));
 err_int_avg = median(err_int(:,1:rmin));
 
-figure(1); clf;
-semilogy(r_vals(1:rmin),err_inf_avg, DisplayName="opinf", Marker="o", MarkerSize=8); 
-grid on; grid minor; hold on;
-semilogy(r_vals(1:rmin),err_int_avg, DisplayName="int", Marker="x", MarkerSize=5); 
-hold off; legend(Location="southwest");
-xlabel('reduced model dimension $r$','Interpreter','LaTeX')
-ylabel('Relative state reconstruction error','Interpreter','LaTeX')
-title('Burgers inferred model error (Training)','Interpreter','LaTeX')
+% figure(1); clf;
+% semilogy(r_vals(1:rmin),err_inf_avg, DisplayName="opinf", Marker="o", MarkerSize=8); 
+% grid on; grid minor; hold on;
+% semilogy(r_vals(1:rmin),err_int_avg, DisplayName="int", Marker="x", MarkerSize=5); 
+% hold off; legend(Location="southwest");
+% xlabel('reduced model dimension $r$','Interpreter','LaTeX')
+% ylabel('Relative state reconstruction error','Interpreter','LaTeX')
+% title('Burgers inferred model error (Training)','Interpreter','LaTeX')
 
-%% Verify Full Models
-figure(2);
-t = tiledlayout(2,Mp/2);
-t.TileSpacing = 'compact';
-t.Padding = 'compact';
+% %% Verify Full Models
+% figure(2);
+% t = tiledlayout(2,Mp/2);
+% t.TileSpacing = 'compact';
+% t.Padding = 'compact';
 
-for i = 1:Mp
-    nexttile
-    s = surf(linspace(0.0,T_end,K+1),linspace(0.0,1.0,N),s_ref_all{i}, ...
-        'FaceAlpha',0.8);
-    s.EdgeColor = 'none';
-    xlabel("t");
-    ylabel("x");
-    title("$\mu$ = "+mus(i),Interpreter="latex")
-end
+% for i = 1:Mp
+%     nexttile
+%     s = surf(linspace(0.0,T_end,K+1),linspace(0.0,1.0,N),s_ref_all{i}, ...
+%         'FaceAlpha',0.8);
+%     s.EdgeColor = 'none';
+%     xlabel("t");
+%     ylabel("x");
+%     title("$\mu$ = "+mus(i),Interpreter="latex")
+% end

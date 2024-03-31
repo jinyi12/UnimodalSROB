@@ -1,1 +1,9 @@
 *.asv
+*.png
+*.jpg
+*.jpeg
+*.log
+*.npy
+*.npz
+/src/__pycache__
+*.out

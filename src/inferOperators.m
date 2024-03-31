@@ -57,6 +57,22 @@ if ~isfield(params,'lambda')
     params.lambda = 0;
 end
 
+if ~isfield(params, 'lambda1')
+    params.lambda1 = 0;
+end
+
+if ~isfield(params, 'lambda2')
+    params.lambda2 = 0;
+end
+
+if ~isfield(params, 'lambda3')
+    params.lambda3 = 0;
+end
+
+if ~isfield(params, 'p')
+    params.p = 2;
+end
+
 if ~isfield(params,'scale')
     params.scale = false;
 end
@@ -81,6 +97,13 @@ end
 % get least-squares data matrix based on desired model form
 [D,l,c,s,mr,m,drp] = getDataMatrix(X,Vr,U,ind,params.modelform, params.p);
 
+sizeparams.l = l;
+sizeparams.c = c;
+sizeparams.s = s;
+sizeparams.mr = mr;
+sizeparams.m = m;
+sizeparams.drp = drp;
+
 % % scale data before LS solve if desired
 % if params.scale
 %     scl = max(abs(D),[],1);
@@ -93,15 +116,17 @@ end
 % temp = tikhonov(rhs,Dscl,params.lambda)';
 % temp = temp./scl;  % un-scale solution
 
-temp = (D \ rhs)';
+% temp = (D \ rhs)';
+temp = tikhonov_poly(rhs, D, sizeparams, params.lambda1, params.lambda2, params.lambda3);
+temp = temp';
 
 operators.A = temp(:,1:l);
 operators.F = temp(:,l+1:l+s);
 operators.H = F2H(operators.F);
 operators.N = temp(:,l+s+1:l+s+mr);
 operators.B = temp(:,l+s+mr+1:l+s+mr+m);
-operators.C = temp(:,l+s+mr+m+c);
-operators.P = temp(:,l+s+mr+m+c+1:end);
+operators.C = temp(:,l+s+mr+m+1:l+s+mr+m+c);
+operators.P = temp(:,l+s+mr+m+c+1:l+s+mr+m+c+drp);
 end
 
 %% builds data matrix based on desired form of learned model

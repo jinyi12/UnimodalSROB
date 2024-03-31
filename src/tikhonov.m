@@ -2,7 +2,7 @@ function x = tikhonov(b,A,k)
 % solves linear regression Ax = b with L2/tikhonov regularization penalty
 %
 % INPUTS
-% A     data matrix
+% A     data matrix 
 % b     right-hand side
 % k     Tikhonov weighting
 %

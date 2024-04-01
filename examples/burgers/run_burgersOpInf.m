@@ -1,6 +1,6 @@
-function run_burgersOpInf()
+function run_burgersOpInf(config_file)
 
-    clear; close all; clc;
+    % clear; close all; clc;
 
     datapath = '/data1/jy384/research/Data/UnimodalSROB/Burgers';
     s_ref_all_path = fullfile(datapath, 'referenceState');
@@ -11,12 +11,12 @@ function run_burgersOpInf()
     addpath(s_ref_all_path);
     addpath('/home/jy384/projects/UnimodalSROB/examples/burgers/burgers-helpers')
 
-    data = jsondecode(fileread('config.json'));
+    data = jsondecode(fileread(config_file));
 
     N = data.N;
     dt = data.dt;
     T_end = data.T_end;
-    mus = eval(data.mus);  % Assuming mus is saved as a string that represents a MATLAB expression
+    mus = data.mus;  % Assuming mus is saved as a string that represents a MATLAB expression
     Mp = data.Mp;
     K = data.K;
     DS = data.DS;
@@ -30,11 +30,16 @@ function run_burgersOpInf()
     mu_end = mus(end);
 
     % reference state for different mus
-    s_ref_all = load(sprintf('s_ref_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end));
+    if ~isfield(data, 'perturbations')
+        s_ref_all = load(sprintf('s_ref_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end));
+    else
+        s_ref_all = load(sprintf('s_ref_all_nominalmu_%s_perturb_%s.mat', data.nominal_mu, data.uid));
+    end
+
     s_ref_all = s_ref_all.s_ref_all;
 
     % Define cell to store reconstructed states
-    s_rec_all = cell(Mp, 1);
+    s_rec_all = cell(length(mus), 1);
 
     % Define array to store reconstructed error for each parameter mu
     err_inf_all = zeros(Mp, 1);
@@ -56,10 +61,16 @@ function run_burgersOpInf()
     u_ref = ones(K,1);
 
     % Vr_all = load('Vr_all.mat'); % all truncated POD basis of order r
-    Vr_all = load(sprintf('Vr_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all truncated POD basis of order r
+    if ~isfield(data, 'perturbations')
+        Vr_all = load(sprintf('Vr_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all truncated POD basis of order r
+    else
+        Vr_all = load(sprintf('Vr_all_nominalmu_%s_perturb_%s.mat', data.nominal_mu, data.uid)); % all truncated POD basis of order r
+    end
+
+    disp(Vr_all)
     Vr_all = Vr_all.Vr_all;
 
-    [infop_all] = burgersOpInf(params, Mp, mus, r);
+    [infop_all] = burgersOpInf(params, Mp, mus, r, data);
     % operators_path = fullfile(datapath, 'operators');
     % infop_all = load(fullfile(operators_path, sprintf('operators_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)));
     % infop_all = infop_all.infop_all;
@@ -100,7 +111,11 @@ function run_burgersOpInf()
     end
 
     % Save the datas
-    reconstructedState_filename = sprintf('s_rec_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+    if ~isfield(data, 'perturbations')
+        reconstructedState_filename = sprintf('s_rec_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+    else
+        reconstructedState_filename = sprintf('s_rec_all_nominalmu_%s_perturb_%s.mat', data.nominal_mu, data.uid);
+
     save(fullfile(reconstructedState_path, reconstructedState_filename), 's_rec_all');
 
 end

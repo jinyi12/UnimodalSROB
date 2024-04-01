@@ -1,4 +1,4 @@
-function runburgers(N, dt, T_end, mus, Mp, DS, u_ref)
+function runburgers(N, dt, T_end, mus, Mp, DS, config_file, u_ref)
 
     logFile = fopen('/data1/jy384/research/Data/UnimodalSROB/Burgers/runburgers_log.txt', 'w');
     
@@ -18,8 +18,13 @@ function runburgers(N, dt, T_end, mus, Mp, DS, u_ref)
     disp(['DS = ', num2str(DS)]);
 
     % Get parameters from config file
-    data = jsondecode(fileread('config.json'));
+    data = jsondecode(fileread(config_file));
     params = data.params;  % This will be a struct in MATLAB
+    if ~isfield(data,'perturbations')
+        perturbations = 'none';
+    else
+        perturbations = data.perturbations;
+    end
 
     % Initialize parameters
     K = T_end/dt; % num time steps
@@ -27,7 +32,7 @@ function runburgers(N, dt, T_end, mus, Mp, DS, u_ref)
 
     % If u_ref is not provided, use ones
     % Check if u_ref is provided
-    if nargin < 7 
+    if nargin < 8 
         u_ref = ones(K,1);
     end
 
@@ -40,7 +45,7 @@ function runburgers(N, dt, T_end, mus, Mp, DS, u_ref)
     U_all = cell(1, length(mus));
 
     % Store values
-    s_ref_all = cell(Mp,1);
+    s_ref_all = cell(length(mus),1);
     
     % LEARN AND ANALYZE TRAINING DATA
     for i = 1:length(mus)
@@ -92,16 +97,28 @@ function runburgers(N, dt, T_end, mus, Mp, DS, u_ref)
     % X_tensor = cat(3, X_all{:});
     % R_tensor = cat(3, R_all{:});
 
-    % save X and R data and name according to the mu values
-    mu_start = mus(1);
-    mu_end = mus(end);
-    mu_step = mus(2) - mus(1);
-    X_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshots/X_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
-    R_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshotsDerivatives/R_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+    if strcmp(perturbations, 'none')
+        % save X and R data and name according to the mu values
+        mu_start = mus(1);
+        mu_end = mus(end);
+        mu_step = mus(2) - mus(1);
+        X_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshots/X_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+        R_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshotsDerivatives/R_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
 
-    % Save the computed U matrix to a file
-    U_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/trajectories/U_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
-    s_ref_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/referenceState/s_ref_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+        % Save the computed U matrix to a file
+        U_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/trajectories/U_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+        s_ref_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/referenceState/s_ref_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+    else
+        uid = data.uid;
+        % save X and R data and name according to the perturbations
+        X_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshots/X_all_nominalmu_%s_perturb_%s.mat', data.nominal_mu, uid);
+        R_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/snapshotsDerivatives/R_all_nominalmu_%s_perturb_%s.mat', data.nominal_mu, uid);
+
+        % Save the computed U matrix to a file
+        U_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/trajectories/U_all_nominalmu_perturb_%s.mat', data.nominal_mu, uid);
+        s_ref_all_filename = sprintf('/data1/jy384/research/Data/UnimodalSROB/Burgers/referenceState/s_ref_all_nominalmu_perturb_%s.mat', uid);
+    end
+    
     
 
     save(U_all_filename, 'U_all');

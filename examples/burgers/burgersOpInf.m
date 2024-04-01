@@ -16,7 +16,7 @@
 %   - Vr_all: truncated POD basis
 
 
-function [infop_all, rmax] = burgersOpInf(params, Mp, mus, r, X_all, R_all, U_all, Vr_all)
+function [infop_all, rmax] = burgersOpInf(params, Mp, mus, r, config, X_all, R_all, U_all, Vr_all)
 
     infop_all = cell(Mp,1);
 
@@ -37,11 +37,19 @@ function [infop_all, rmax] = burgersOpInf(params, Mp, mus, r, X_all, R_all, U_al
     mu_step = mus(2) - mus(1);
     mu_end = mus(end);
 
-    if nargin < 5
-        Vr_all = load(sprintf('Vr_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all POD basis
-        X_all = load(sprintf('X_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all state data
-        R_all = load(sprintf('R_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all RHS data
-        U_all = load(sprintf('U_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all input data
+    if nargin < 6
+        if ~isfield(config, 'perturbations')
+            Vr_all = load(sprintf('Vr_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all POD basis
+            X_all = load(sprintf('X_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all state data
+            R_all = load(sprintf('R_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all RHS data
+            U_all = load(sprintf('U_all_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end)); % all input data
+        else
+            uid = config.uid;
+            Vr_all = load(sprintf('Vr_all_nominalmu_%s_perturb_%s.mat', config.nominal_mu, uid))
+            X_all = load(sprintf('X_all_nominalmu_%s_perturb_%s.mat', config.nominal_mu, uid));
+            R_all = load(sprintf('R_all_nominalmu_%s_perturb_%s.mat', config.nominal_mu, uid));
+            U_all = load(sprintf('U_all_nominalmu_%s_perturb_%s.mat', config.nominal_mu, uid));
+        end
     end
 
     rmax = r;
@@ -82,7 +90,12 @@ function [infop_all, rmax] = burgersOpInf(params, Mp, mus, r, X_all, R_all, U_al
 
     % save at the data path
     operators_path = fullfile(datapath, 'operators');
-    operators_filename = sprintf('operators_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+
+    if isfield(config, 'perturbations')
+        operators_filename = sprintf('operators_nominalmu_%s_perturb_%s.mat', config.nominal_mu, config.uid);
+    else
+        operators_filename = sprintf('operators_mu_%g_%g_%g.mat', mu_start, mu_step, mu_end);
+
     save(fullfile(operators_path, operators_filename), 'infop_all');
     rmpath(datapath);
 end

@@ -7,3 +7,9 @@
 *.npz
 /src/__pycache__
 *.out
+*.h5
+*.hdf5
+*.json
+*.gif
+*.pkl
+*.xdmf

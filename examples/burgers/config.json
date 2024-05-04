@@ -1,1 +1,0 @@
-{"N": 129, "dt": 0.0001, "T_end": 1, "mus": "0.01:0.01:0.1", "Mp": 10, "K": 10000.0, "DS": 1, "params": {"modelform": "LQIPC", "modeltime": "continuous", "dt": 0.0001, "ddt_order": "2imp", "p": 0, "lambda1": 0.1, "lambda2": 0.1, "lambda3": 0.1}, "robparams": {"r": 15}}

@@ -769,7 +769,7 @@ def train_gridsearch(
             print("Bound check passed")
             if q_rom.shape[1] > trainsize:
                 errors_pass[tuple(regs)] = Lp_error(
-                    Q_, q_rom[:, :trainsize], time_domain[:trainsize]
+                    Qtrue[:, :trainsize], q_rom[:, :trainsize], time_domain[:trainsize]
                 )[1]
             else:
                 errors_pass[tuple(regs)] = Lp_error(Qtrue, q_rom, time_domain)[1]

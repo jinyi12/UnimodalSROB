@@ -33,12 +33,16 @@
 # * create_random_Stiefel_data(n, p, dist, metric_alpha):
 #       - create (pseudo-)random Stiefel data: for testing purposes
 #
-#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------s
 
 import numpy as np
 import scipy
 from scipy import linalg
 from numpy import random
+import numba
+
+# set numba threads to half of the available cores
+numba.set_num_threads(numba.config.NUMBA_NUM_THREADS//2)
 
 #prog_path = '/home/zimmermann/Documents/ScientificAndSVN/RZ_SDU/Papers_IMADA/Manifold_Ops/Manifold_Ops_Python/'
 #sys.path.append(prog_path + 'Stiefel_Aux/')
@@ -209,7 +213,7 @@ def Stiefel_Log_alg(U0, U1, tau, do_Procrustes=0, do_Cayley=1, do_Sylvester=1):
     if do_Procrustes:
         # "Procrustes preprocessing"
         # SVD of lower diagonal block of V
-        D, S, R = scipy.linalg.svd(V[p:2*p,p:2*p],\
+        D, S, R = np.linalg.svd(V[p:2*p,p:2*p],\
                                    full_matrices=False,\
                                    compute_uv=True,\
                                    overwrite_a=False)
@@ -224,7 +228,7 @@ def Stiefel_Log_alg(U0, U1, tau, do_Procrustes=0, do_Cayley=1, do_Sylvester=1):
     # check if V \in SO(2p)
     if check_det:
         # ensure that V \in SO(n)                                       
-        DetV = scipy.linalg.det(V)
+        DetV = np.linalg.det(V)
         if DetV < 0:
             # flip sign of one column
             V[:,p] = (-1)*V[:,p]
@@ -322,6 +326,7 @@ def Stiefel_Log_alg(U0, U1, tau, do_Procrustes=0, do_Cayley=1, do_Sylvester=1):
 #@author: Ralf Zimmermann, IMADA, SDU Odense
 # 
 #------------------------------------------------------------------------------
+@numba.njit(fastmath=True)
 def Stiefel_Log_p_Shooting_uni(U0, U1, unit_int, tau, metric_alpha):
 #------------------------------------------------------------------------------
     n,p = U0.shape
@@ -389,7 +394,7 @@ def Stiefel_Log_p_Shooting_uni(U0, U1, unit_int, tau, metric_alpha):
             upper = np.concatenate((A_pre, -R.transpose()), axis=1)
             lower = np.concatenate((R, np.zeros((p,p), dtype=R.dtype)), axis=1)
             L     = np.concatenate((upper, lower), axis=0)                 
-            Evals, Evecs = scipy.linalg.eig(L)               
+            Evals, Evecs = np.linalg.eig(L)               
             # eigenvalues are on complex axis
             evals = np.imag(Evals)
         

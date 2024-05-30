@@ -362,7 +362,7 @@ def gen_stiefel_samples(
             rob[-1], delta, metric_alpha=metric_alpha
         )
 
-    return stiefel_samples, maxI
+    return stiefel_samples, maxI, beta.value
 
 
 def calc_frechet_mean_mat(samples, U0, eps, tau=1e-3):

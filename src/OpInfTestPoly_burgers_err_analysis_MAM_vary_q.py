@@ -145,7 +145,7 @@ mu_test = 0.98
 # Load data
 
 
-p = 2
+p = 3
 Mp = len(mus)
 dt = 1e-3
 T_end = 2
@@ -455,8 +455,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
 
 # %%
 # err_tols = [1e-2, 1e-3, 1e-4, 1e-5]
-# err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
-err_tols = [1e-1, 5e-2, 1e-2, 5e-3, 1e-3]
+err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
 for err_tol in err_tols:
@@ -493,321 +492,27 @@ for err_tol in err_tols:
     max_idx_lst.append(max(idx_lst))
 
 
-tol = 1e-3  # tolerence for alternating minimization
-gamma = 0.01  # regularization parameter
-max_iter = 100  # maximum number of iterations
-
-Vr_lst = []
-Vbar_lst = []
-Shat_lst = []
-Xi_lst = []
-Poly_lst = []
-
-energy_list = []
-
-for i in range(len(err_tols)):
-    # print(i)
-    # Model parameters
-    print("Error Tolerance: ", err_tols[i])
-    r = max_idx_lst[i]
-    print("r is: ", r)
-    q_trunc = 2
-
-    # Procustes problem for each mu
-    X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
-    num_snapshots = X.shape[1]
-    print("num_snapshots: ", num_snapshots)
-    # print("X = ", X.shape)
-    X_ref = np.mean(X, axis=1)[:, None]
-    # X_ref = np.zeros((X.shape[0]))[:, None]
-    X_centered = X - X_ref
-
-    U, S, W = np.linalg.svd(X_centered, full_matrices=False)
-
-    Vr = U[:, :r]
-    Vbar = U[:, r : r + q_trunc]
-    q = Vr.T @ X_centered
-    Proj_error = X_centered - (Vr @ q)
-    Poly = np.concatenate(polynomial_form(q, p), axis=0)
-    Xi = (
-        Vbar.T
-        @ Proj_error
-        @ Poly.T
-        @ np.linalg.inv(Poly @ Poly.T + gamma * np.identity((p - 1) * r))
-    )
-
-    Gamma_MPOD = X_ref + (Vr @ q) + (Vbar @ Xi @ Poly)
-    print(f"Reconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
-
-    energy = (
-        np.linalg.norm(Vr @ q + (Vbar @ Xi @ Poly), "fro") ** 2
-        / np.linalg.norm(X - X_ref, "fro") ** 2
-    )
-    print(f"Energy: {energy:.4e}")
-    print("\n")
-
-    # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None)
-    # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization_jax(X, X_ref, num_snapshots, max_iter, 1e-3, gamma, r, q_trunc, p, initial_Shat=None)
-
-    energy_list.append(energy)
-    Vr_lst.append(Vr)
-    Vbar_lst.append(Vbar)
-    Shat_lst.append(q)
-    Xi_lst.append(Xi)
-    Poly_lst.append(Poly)
-
-    # print("q = ", q.shape)
-    # print("qbar = ", qbar.shape)
-
-# %%
-Gamma_MPOD = X_ref + (Vr @ q) + (Vbar @ Xi @ Poly)
-print(f"\nReconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
-
-# ----------------------------------------------------------------------------------------------------------------
-
-# %%
-X_all_full = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
-)
-relative_error_testing_window_lst = []
-relative_error_training_window_lst = []
-abs_error_full_lst = []
-regs_lst = []
-reduced_state_errors = []
-
-
-# regs_lst_poly_vary_r = np.array([[129.1549665014884, 200.00000000000003, 1389.4954943731373],
-#     [1000.0, 200.00000000000003, 26.826957952797258],
-#     [10.0, 130.3672689737678, 10000000.0],
-#     [10.0, 44.721359549995796, 10000000.0],
-#     [100.0, 200.00000000000003, 10000000.0]
-# ])
-
-for err_idx in range(len(err_tols)):
-    # for i in range(1):
-
-    # err_idx = 4
-    X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
-    X_ref = np.mean(X, axis=1)[:, None]
-    # X_ref = np.zeros((X.shape[0]))[:, None]
-    X_centered = X - X_ref
-
-    Vr = Vr_lst[err_idx]
-    Vbar = Vbar_lst[err_idx]
-    Xi = Xi_lst[err_idx]
-    q = Vr.T @ X_centered
-
-    r = max_idx_lst[err_idx]
-
-    Mp = len(mus)
-    Nsnapshots = X.shape[1]
-    dShatdt = []
-    Shat_lst = []
-    dSdt = []
-    for j in range(Mp):
-        start_ind = int((j) * Nsnapshots / Mp)
-        end_ind = int((j + 1) * Nsnapshots / Mp)
-        print("start_ind: ", start_ind)
-        print("end_ind: ", end_ind)
-        ddtshat, ind = ddt(q[:, start_ind:end_ind], dt=dt, scheme="4c")
-        ddts, ind = ddt(X[:, start_ind:end_ind], dt=dt, scheme="4c")
-        dShatdt.append(ddtshat)
-        ind = np.array(ind) + int((j) * Nsnapshots / Mp)
-        Shat_lst.append(q[:, ind])
-        dSdt.append(ddts)
-
-    # update config file with truncation order r
-    config["robparams"] = {"r": int(r)}
-
-    Shat_py = np.concatenate(Shat_lst, axis=1)
-    dShatdt_py = np.concatenate(dShatdt, axis=1).T
-    dSdt_py = np.hstack(dSdt)
-
-    print("Shape of Shat_py: ", Shat_py.shape)
-    print("Shape of dShatdt_py: ", dShatdt_py.shape)
-    # [operators] = inferOperators_NL(Shat, U, params, dShatdt);
-
-    # operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
-    # operators = infer_operators_nl(q, None, config['params'], /dShatdt_py)
-
-    config["robparams"] = {"r": int(r)}
-
-    N = int(config["N"])
-    dt = config["dt"]
-    T_end = config["T_end"]
-    mus = config[
-        "mus"
-    ]  # Assuming mus is saved as a string that represents a Python expression
-    Mp = config["Mp"]
-    K = int(config["K"])
-    DS = config["DS"]
-    params = config["params"]  # This will be a dictionary in Python
-    robparams = config["robparams"]  # This will be a dictionary in Python
-
-    coord = np.linspace(0, 1, N)
-    print("coord = ", coord.shape)
-    IC = np.array([initial_condition(c, mu_test) for c in coord])
-    q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
-    time_domain = np.arange(0, T_end, dt)
-    train_size = Shat_py.shape[1] // len(mus)
-
-    print("Train size: ", train_size)
-
-    # regs = [1e1, 3e3, 1e9]
-    # regs = [0.001, 20, 1e5]
-    # Shat_true = Shat_lst[2]
-
-    Shat_true = Vr.T @ (X_all_test.T[:, : Train_T + 1] - X_ref)
-
-    # regs_product = [1e0, 1e2, 15, 3e1, 1e3, 15, 1e7, 1e7, 1]
-    # regs_product = [1e1, 1e3, 10, 1e1, 2e2, 15, 1e1, 1e7, 15]
-    # regs_product = [1e0, 2e2, 5, 1e1, 2e2, 5, 1e7, 1e7, 1]
-    # regs_product = [1e1, 1e1, 1, 1e2, 1e2, 1, 1e7, 1e7, 1]
-
-    # regs_product = [regs_lst_poly_vary_r[err_idx][0], regs_lst_poly_vary_r[err_idx][0], 1,
-    #                 regs_lst_poly_vary_r[err_idx][1], regs_lst_poly_vary_r[err_idx][1], 1,
-    #                 regs_lst_poly_vary_r[err_idx][2], regs_lst_poly_vary_r[err_idx][2], 1]
-
-    if err_idx == 0:
-        # regs_product = [1e-1, 1e-1, 1, 1e1, 1e4, 10, 1e3, 1e8, 10]
-        regs_product = [
-            1e-2,
-            1e-2,
-            1,
-            1e2,
-            1e4,
-            15,
-            1e3,
-            1e10,
-            15,
-        ]  # for r=8, 5e-2 error
-    elif err_idx == 1:
-        regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e3, 1e10, 7]
-
-    elif err_idx == 2:
-        regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e6, 1e10, 4]
-
-    # elif err_idx == len(err_tols) - 1:
-    #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e5, 1e5, 1]
-
-    # elif err_idx == len(err_tols) - 2:
-    #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e6, 1e6, 1]
-    elif err_idx == len(err_tols) - 1:
-        regs_product = [1e-2, 1e-1, 3, 1e1, 1e3, 10, 1e5, 1e10, 5]
-
-    elif err_idx == len(err_tols) - 2:
-        regs_product = [1e-2, 1e-1, 3, 1e1, 1e3, 10, 1e5, 1e10, 5]
-
-    regs, errors = train_gridsearch(
-        Shat_py,
-        dShatdt_py,
-        Shat_true,
-        train_size,
-        r,
-        regs_product,
-        time_domain,
-        q0,
-        params,
-        testsize=None,
-        margin=1.1,
-    )
-
-    regs_lst.append(regs)
-    reduced_state_errors.append(errors)
-
-    params["lambda1"] = regs[0]
-    params["lambda2"] = regs[1]
-    if len(regs) > 2:
-        params["lambda3"] = regs[2]
-
-    operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
-
-    # compute the full time series
-    coord = np.linspace(0, 1, N)
-    print("coord = ", coord.shape)
-    IC = np.array([initial_condition(c, mu_test) for c in coord])
-    q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
-
-    T_end_full = 8
-    time_domain_full = np.arange(0, T_end_full, dt)
-
-    multi_indices = generate_multi_indices_efficient(len(q0), p=p)
-
-    modelform = config["params"]["modelform"]
-    out_full = scipy.integrate.solve_ivp(
-        rhs,  # Integrate this function
-        [time_domain_full[0], time_domain_full[-1]],  # over this time interval
-        q0,  # from this initial condition
-        t_eval=time_domain_full,  # evaluated at these points
-        args=[operators, params, None, multi_indices],  # additional arguments to rhs
-    )
-
-    s_hat_full = out_full.y
-    poly_full = np.concatenate(polynomial_form(s_hat_full, p=p), axis=0)
-    print("Poly shape: ", poly_full.shape)
-
-    s_rec_full = X_ref + Vr @ s_hat_full + Vbar @ Xi @ poly_full
-
-    abs_error_full = np.abs(X_all_test.T - s_rec_full)
-    T_end_full_index = int(T_end_full / dt)
-    T_end_index = int(T_end / dt)
-
-    relative_error_testing_window = np.linalg.norm(
-        X_all_test.T[:, T_end_index:] - s_rec_full[:, T_end_index:], "fro"
-    ) / np.linalg.norm(X_all_test.T[:, T_end_index:], "fro")
-    relative_error_training_window = np.linalg.norm(
-        X_all_test.T[:, :T_end_index] - s_rec_full[:, :T_end_index], "fro"
-    ) / np.linalg.norm(X_all_test.T[:, :T_end_index], "fro")
-
-    abs_error_full_lst.append(abs_error_full)
-    relative_error_testing_window_lst.append(relative_error_testing_window)
-    relative_error_training_window_lst.append(relative_error_training_window)
-
-
-# %%
-print("Regs: ", regs_lst)
-print("errors: ", reduced_state_errors)
-print("Relative Error Training: ", relative_error_training_window_lst)
-print("Relative Error Testing: ", relative_error_testing_window_lst)
-
-# save the results as pickle
-import pickle
-
-results = {
-    "energy_lst": energy_list,
-    "regs_lst": regs_lst,
-    "errors": reduced_state_errors,
-    "relative_error_training": relative_error_training_window_lst,
-    "relative_error_testing": relative_error_testing_window_lst,
-}
-
-with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
-    pickle.dump(results, f)
-
-
-# # %%
-# # X_all_full = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")
-# X_all_full = np.load(
-#     "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
-# )
-# relative_error_testing_window_lst_vary_q = []
-# relative_error_training_window_lst_vary_q = []
-# reduce_state_errors_vary_q = []
-# abs_error_full_lst_vary_q = []
-# energy_list_vary_q = []
-# regs_lst_vary_q = []
-
+# # ----------------------------------------------------------------------------------------------------------------
 
 # tol = 1e-3  # tolerence for alternating minimization
-# gamma = 0.01  # regularization parameter
+# gamma = 0.001  # regularization parameter
 # max_iter = 100  # maximum number of iterations
 
+# Vr_lst = []
+# Vbar_lst = []
+# Shat_lst = []
+# Xi_lst = []
+# Poly_lst = []
 
-# q_trunc_lst = [2, 2**2, 2**3, 2**4, 2**5]
-# # r = max_idx_lst[1]  # 5e-2, r=5
-# r = max_idx_lst[0]  # 5e-2, r=5
+# energy_list = []
 
-# for q_trunc_index in range(len(q_trunc_lst)):
+# for i in range(len(err_tols)):
+#     # print(i)
+#     # Model parameters
+#     print("Error Tolerance: ", err_tols[i])
+#     r = max_idx_lst[i]
+#     print("r is: ", r)
+#     q_trunc = 2
 
 #     # Procustes problem for each mu
 #     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
@@ -821,7 +526,7 @@ with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
 #     U, S, Vr = np.linalg.svd(X_centered, full_matrices=False)
 
 #     Vr = U[:, :r]
-#     Vbar = U[:, r : r + q_trunc_lst[q_trunc_index]]
+#     Vbar = U[:, r : r + q_trunc]
 #     q = Vr.T @ X_centered
 #     Proj_error = X_centered - (Vr @ q)
 #     Poly = np.concatenate(polynomial_form(q, p), axis=0)
@@ -839,22 +544,66 @@ with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
 #         np.linalg.norm(Vr @ q + (Vbar @ Xi @ Poly), "fro") ** 2
 #         / np.linalg.norm(X - X_ref, "fro") ** 2
 #     )
-
-#     # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(
-#     #     X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None
-#     # )
-
 #     print(f"Energy: {energy:.4e}")
 #     print("\n")
 
-#     energy_list_vary_q.append(energy)
+#     # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None)
+#     # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization_jax(X, X_ref, num_snapshots, max_iter, 1e-3, gamma, r, q_trunc, p, initial_Shat=None)
+
+#     energy_list.append(energy)
+#     Vr_lst.append(Vr)
+#     Vbar_lst.append(Vbar)
+#     Shat_lst.append(q)
+#     Xi_lst.append(Xi)
+#     Poly_lst.append(Poly)
+
+#     # print("q = ", q.shape)
+#     # print("qbar = ", qbar.shape)
+
+# # %%
+# Gamma_MPOD = X_ref + (Vr @ q) + (Vbar @ Xi @ Poly)
+# print(f"\nReconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
+
+# # ----------------------------------------------------------------------------------------------------------------
+
+# # %%
+# X_all_full = np.load(
+#     "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+# )
+# relative_error_testing_window_lst = []
+# relative_error_training_window_lst = []
+# abs_error_full_lst = []
+# regs_lst = []
+# reduced_state_errors = []
+
+
+# # regs_lst_poly_vary_r = np.array([[129.1549665014884, 200.00000000000003, 1389.4954943731373],
+# #     [1000.0, 200.00000000000003, 26.826957952797258],
+# #     [10.0, 130.3672689737678, 10000000.0],
+# #     [10.0, 44.721359549995796, 10000000.0],
+# #     [100.0, 200.00000000000003, 10000000.0]
+# # ])
+
+# for err_idx in range(len(err_tols)):
+#     # for i in range(1):
+
+#     # err_idx = 4
+#     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
+#     X_ref = np.mean(X, axis=1)[:, None]
+#     # X_ref = np.zeros((X.shape[0]))[:, None]
+#     X_centered = X - X_ref
+
+#     Vr = Vr_lst[err_idx]
+#     Xi = Xi_lst[err_idx]
+#     q = Vr.T @ X_centered
+
+#     r = max_idx_lst[err_idx]
 
 #     Mp = len(mus)
 #     Nsnapshots = X.shape[1]
 #     dShatdt = []
 #     Shat_lst = []
 #     dSdt = []
-
 #     for j in range(Mp):
 #         start_ind = int((j) * Nsnapshots / Mp)
 #         end_ind = int((j + 1) * Nsnapshots / Mp)
@@ -902,23 +651,31 @@ with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
 #     time_domain = np.arange(0, T_end, dt)
 #     train_size = Shat_py.shape[1] // len(mus)
 
+#     print("Train size: ", train_size)
+
 #     # regs = [1e1, 3e3, 1e9]
 #     # regs = [0.001, 20, 1e5]
 #     # Shat_true = Shat_lst[2]
+
 #     Shat_true = Vr.T @ (X_all_test.T[:, : Train_T + 1] - X_ref)
 
-#     # regs_product = [1e-3, 1e1, 10, 1e1, 1e4, 15, 1e-3, 1e7, 10]
-#     # regs_product = [1e-3, 1e-3, 1, 23, 60, 10]
-#     # regs_product = [1e-3, 1e-2, 5, 1e-3, 1e-2, 5, 1e-3, 1e-1, 5]
+#     # regs_product = [1e0, 1e2, 15, 3e1, 1e3, 15, 1e7, 1e7, 1]
+#     # regs_product = [1e1, 1e3, 10, 1e1, 2e2, 15, 1e1, 1e7, 15]
+#     # regs_product = [1e0, 2e2, 5, 1e1, 2e2, 5, 1e7, 1e7, 1]
+#     # regs_product = [1e1, 1e1, 1, 1e2, 1e2, 1, 1e7, 1e7, 1]
 
-#     # [1000.0, 200.00000000000003, 26.826957952797258]
+#     # regs_product = [regs_lst_poly_vary_r[err_idx][0], regs_lst_poly_vary_r[err_idx][0], 1,
+#     #                 regs_lst_poly_vary_r[err_idx][1], regs_lst_poly_vary_r[err_idx][1], 1,
+#     #                 regs_lst_poly_vary_r[err_idx][2], regs_lst_poly_vary_r[err_idx][2], 1]
 
-#     # regs_product = [1e1, 1e3, 3, 1e1, 1e3, 10, 1e1, 1e6, 15]  # for r=5, 5e-2 error
-#     # regs_product = [1e1, 1e3, 4, 1e2, 1e3, 10, 1e1, 1e6, 10] # for r=12, 1e-2 error
+#     if err_idx < len(err_tols) - 1:
+#         regs_product = [1e-2, 1e-2, 1, 1e2, 1e5, 8, 1e3, 1e7, 8]
 
-#     # using this for r=8!
-#     # regs_product = [1e-2, 1e-2, 1, 1e1, 1e5, 6, 1e3, 1e10, 7]  # for r=8, 5e-2 error
-#     regs_product = [1e-2, 1e1, 5, 1e3, 1e6, 10, 1e3, 1e6, 10]
+#     elif err_idx == len(err_tols) - 1:
+#         regs_product = [1e-2, 1e-2, 1, 1e2, 1e2, 1, 1e5, 1e5, 1]
+
+#     elif err_idx == len(err_tols) - 2:
+#         regs_product = [1e-2, 1e-2, 1, 1e2, 1e2, 1, 1e6, 1e6, 1]
 
 #     regs, errors = train_gridsearch(
 #         Shat_py,
@@ -933,9 +690,8 @@ with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
 #         testsize=None,
 #         margin=1.1,
 #     )
-
-#     regs_lst_vary_q.append(regs)
-#     reduce_state_errors_vary_q.append(errors)
+#     regs_lst.append(regs)
+#     reduced_state_errors.append(errors)
 
 #     params["lambda1"] = regs[0]
 #     params["lambda2"] = regs[1]
@@ -970,218 +726,233 @@ with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
 
 #     s_rec_full = X_ref + Vr @ s_hat_full + Vbar @ Xi @ poly_full
 
+#     abs_error_full = np.abs(X_all_test.T - s_rec_full)
+#     T_end_full_index = int(T_end_full / dt)
 #     T_end_index = int(T_end / dt)
 
-#     abs_error_full = np.abs(X_all_test.T - s_rec_full)
-#     relative_error_window = np.linalg.norm(
+#     relative_error_testing_window = np.linalg.norm(
 #         X_all_test.T[:, T_end_index:] - s_rec_full[:, T_end_index:], "fro"
 #     ) / np.linalg.norm(X_all_test.T[:, T_end_index:], "fro")
 #     relative_error_training_window = np.linalg.norm(
 #         X_all_test.T[:, :T_end_index] - s_rec_full[:, :T_end_index], "fro"
 #     ) / np.linalg.norm(X_all_test.T[:, :T_end_index], "fro")
 
-#     abs_error_full_lst_vary_q.append(abs_error_full)
-#     relative_error_testing_window_lst_vary_q.append(relative_error_window)
-#     relative_error_training_window_lst_vary_q.append(relative_error_training_window)
+#     abs_error_full_lst.append(abs_error_full)
+#     relative_error_testing_window_lst.append(relative_error_testing_window)
+#     relative_error_training_window_lst.append(relative_error_training_window)
 
 
-# # save the results as pickle
-# with open("OpInfPoly_Results_Err_Analysis_vary_q_p3.pkl", "wb") as f:
-#     pickle.dump(
-#         {
-#             "energy_lst": energy_list_vary_q,
-#             "regs_lst_vary_q": regs_lst_vary_q,
-#             "errors": reduce_state_errors_vary_q,
-#             "relative_error_training": relative_error_training_window_lst_vary_q,
-#             "relative_error_testing": relative_error_testing_window_lst_vary_q,
-#         },
-#         f,
-#     )
-
-
-# # ----------------------------------------------MAM------------------------------------------------------------------
 # # %%
-# # X_all_full = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")
-# X_all_full = np.load(
-#     "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
-# )
-# relative_error_testing_window_lst_vary_q = []
-# relative_error_training_window_lst_vary_q = []
-# reduce_state_errors_vary_q = []
-# abs_error_full_lst_vary_q = []
-# energy_list_vary_q = []
-# regs_lst_vary_q = []
-
-
-# tol = 1e-4  # tolerence for alternating minimization
-# gamma = 0.0001  # regularization parameter
-# max_iter = 100  # maximum number of iterations
-
-
-# q_trunc_lst = [2, 2**2, 2**3, 2**4, 2**5]
-# r = max_idx_lst[1]  # 5e-2, r=5
-# # r = max_idx_lst[2] # 1e-2, r=12
-
-# for q_trunc_index in range(len(q_trunc_lst)):
-
-#     # Procustes problem for each mu
-#     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
-#     num_snapshots = X.shape[1]
-#     print("num_snapshots: ", num_snapshots)
-#     X_ref = np.mean(X, axis=1)[:, None]
-
-#     q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(
-#         X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None
-#     )
-
-#     print(f"Energy: {energy:.4e}")
-#     print("\n")
-
-#     energy_list_vary_q.append(energy)
-
-#     Mp = len(mus)
-#     Nsnapshots = X.shape[1]
-#     dShatdt = []
-#     Shat_lst = []
-#     dSdt = []
-
-#     for j in range(Mp):
-#         start_ind = int((j) * Nsnapshots / Mp)
-#         end_ind = int((j + 1) * Nsnapshots / Mp)
-#         print("start_ind: ", start_ind)
-#         print("end_ind: ", end_ind)
-#         ddtshat, ind = ddt(q[:, start_ind:end_ind], dt=dt, scheme="4c")
-#         ddts, ind = ddt(X[:, start_ind:end_ind], dt=dt, scheme="4c")
-#         dShatdt.append(ddtshat)
-#         ind = np.array(ind) + int((j) * Nsnapshots / Mp)
-#         Shat_lst.append(q[:, ind])
-#         dSdt.append(ddts)
-
-#     # update config file with truncation order r
-#     config["robparams"] = {"r": int(r)}
-
-#     Shat_py = np.concatenate(Shat_lst, axis=1)
-#     dShatdt_py = np.concatenate(dShatdt, axis=1).T
-#     dSdt_py = np.hstack(dSdt)
-
-#     print("Shape of Shat_py: ", Shat_py.shape)
-#     print("Shape of dShatdt_py: ", dShatdt_py.shape)
-#     # [operators] = inferOperators_NL(Shat, U, params, dShatdt);
-
-#     operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
-#     # operators = infer_operators_nl(q, None, config['params'], /dShatdt_py)
-
-#     config["robparams"] = {"r": int(r)}
-
-#     N = int(config["N"])
-#     dt = config["dt"]
-#     T_end = config["T_end"]
-#     mus = config[
-#         "mus"
-#     ]  # Assuming mus is saved as a string that represents a Python expression
-#     Mp = config["Mp"]
-#     K = int(config["K"])
-#     DS = config["DS"]
-#     params = config["params"]  # This will be a dictionary in Python
-#     robparams = config["robparams"]  # This will be a dictionary in Python
-
-#     coord = np.linspace(0, 1, N)
-#     print("coord = ", coord.shape)
-#     IC = np.array([initial_condition(c) for c in coord])
-#     q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
-#     time_domain = np.arange(0, T_end, dt)
-#     train_size = Shat_py.shape[1]
-
-#     # regs = [1e1, 3e3, 1e9]
-#     # regs = [0.001, 20, 1e5]
-#     # Shat_true = Shat_lst[2]
-
-#     Shat_true = Vr.T @ (X_all_test.T - np.mean(X_all_test.T, axis=1)[:, None])
-
-#     # regs_product = [1e-3, 1e1, 10, 1e1, 1e4, 15, 1e-3, 1e7, 10]
-#     # regs_product = [1e-3, 1e-3, 1, 23, 60, 10]
-#     # regs_product = [1e-3, 1e-2, 5, 1e-3, 1e-2, 5, 1e-3, 1e-1, 5]
-
-#     # [1000.0, 200.00000000000003, 26.826957952797258]
-
-#     # regs_product = [1e1, 1e3, 3, 1e1, 1e3, 10, 1e1, 1e6, 15]  # for r=5, 5e-2 error
-#     # regs_product = [1e1, 1e3, 4, 1e2, 1e3, 10, 1e1, 1e6, 10] # for r=12, 1e-2 error
-#     regs_product = [1e-2, 1e-2, 1, 1e1, 1e5, 6, 1e3, 1e10, 7]  # for r=5, 5e-2 error
-
-#     regs, errors = train_gridsearch(
-#         Shat_py,
-#         dShatdt_py,
-#         Shat_true,
-#         train_size,
-#         r,
-#         regs_product,
-#         time_domain,
-#         q0,
-#         params,
-#         testsize=None,
-#         margin=1.1,
-#     )
-
-#     regs_lst_vary_q.append(regs)
-#     reduce_state_errors_vary_q.append(errors)
-
-#     params["lambda1"] = regs[0]
-#     params["lambda2"] = regs[1]
-#     if len(regs) > 2:
-#         params["lambda3"] = regs[2]
-
-#     operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
-
-#     # compute the full time series
-#     coord = np.linspace(0, 1, N)
-#     print("coord = ", coord.shape)
-#     IC = np.array([initial_condition(c) for c in coord])
-#     q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
-
-#     T_end_full = 8
-#     time_domain_full = np.arange(0, T_end_full, dt)
-
-#     multi_indices = generate_multi_indices_efficient(len(q0), p=p)
-
-#     modelform = config["params"]["modelform"]
-#     out_full = scipy.integrate.solve_ivp(
-#         rhs,  # Integrate this function
-#         [time_domain_full[0], time_domain_full[-1]],  # over this time interval
-#         q0,  # from this initial condition
-#         t_eval=time_domain_full,  # evaluated at these points
-#         args=[operators, params, None, multi_indices],  # additional arguments to rhs
-#     )
-
-#     s_hat_full = out_full.y
-#     poly_full = np.concatenate(polynomial_form(s_hat_full, p=p), axis=0)
-#     print("Poly shape: ", poly_full.shape)
-
-#     s_rec_full = X_ref + Vr @ s_hat_full + Vbar @ Xi @ poly_full
-
-#     T_end_index = int(T_end / dt)
-
-#     abs_error_full = np.abs(X_all_test.T - s_rec_full)
-#     relative_error_window = np.linalg.norm(
-#         X_all_test.T[:, T_end_index:] - s_rec_full[:, T_end_index:], "fro"
-#     ) / np.linalg.norm(X_all_test.T[:, T_end_index:], "fro")
-#     relative_error_training_window = np.linalg.norm(
-#         X_all_test.T[:, :T_end_index] - s_rec_full[:, :T_end_index], "fro"
-#     ) / np.linalg.norm(X_all_test.T[:, :T_end_index], "fro")
-
-#     abs_error_full_lst_vary_q.append(abs_error_full)
-#     relative_error_testing_window_lst_vary_q.append(relative_error_window)
-#     relative_error_training_window_lst_vary_q.append(relative_error_training_window)
-
+# print("Regs: ", regs_lst)
+# print("errors: ", reduced_state_errors)
+# print("Relative Error Training: ", relative_error_training_window_lst)
+# print("Relative Error Testing: ", relative_error_testing_window_lst)
 
 # # save the results as pickle
-# with open("OpInfPoly_Results_Err_Analysis_vary_q.pkl_MAM", "wb") as f:
-#     pickle.dump(
-#         {
-#             "energy_lst": energy_list_vary_q,
-#             "regs_lst_vary_q": regs_lst_vary_q,
-#             "errors": reduce_state_errors_vary_q,
-#             "relative_error_training": relative_error_training_window_lst_vary_q,
-#             "relative_error_testing": relative_error_testing_window_lst_vary_q,
-#         },
-#         f,
-#     )
+# import pickle
+
+# results = {
+#     "energy_lst": energy_list,
+#     "regs_lst": regs_lst,
+#     "errors": reduced_state_errors,
+#     "relative_error_training": relative_error_training_window_lst,
+#     "relative_error_testing": relative_error_testing_window_lst,
+# }
+
+# with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
+#     pickle.dump(results, f)
+
+# ----------------------------------------------------------------------------------------------------------------
+
+# %%
+# X_all_full = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")
+X_all_full = np.load(
+    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+)
+relative_error_testing_window_lst_vary_q = []
+relative_error_training_window_lst_vary_q = []
+reduce_state_errors_vary_q = []
+abs_error_full_lst_vary_q = []
+energy_list_vary_q = []
+regs_lst_vary_q = []
+
+
+tol = 1e-3  # tolerence for alternating minimization
+gamma = 0.01  # regularization parameter
+max_iter = 100  # maximum number of iterations
+
+
+q_trunc_lst = [2, 2**2, 2**3, 2**4, 2**5]
+# r = max_idx_lst[1]  # 5e-2, r=5
+r = max_idx_lst[0]  # 5e-2, r=5
+
+for q_trunc_index in range(len(q_trunc_lst)):
+
+    q_trunc = q_trunc_lst[q_trunc_index]
+
+    # Procustes problem for each mu
+    X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
+    num_snapshots = X.shape[1]
+    print("num_snapshots: ", num_snapshots)
+    # print("X = ", X.shape)
+    X_ref = np.mean(X, axis=1)[:, None]
+    # X_ref = np.zeros((X.shape[0]))[:, None]
+
+    q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(
+        X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None
+    )
+
+    print(f"Energy: {energy:.4e}")
+    print("\n")
+
+    energy_list_vary_q.append(energy)
+
+    Mp = len(mus)
+    Nsnapshots = X.shape[1]
+    dShatdt = []
+    Shat_lst = []
+    dSdt = []
+
+    for j in range(Mp):
+        start_ind = int((j) * Nsnapshots / Mp)
+        end_ind = int((j + 1) * Nsnapshots / Mp)
+        print("start_ind: ", start_ind)
+        print("end_ind: ", end_ind)
+        ddtshat, ind = ddt(q[:, start_ind:end_ind], dt=dt, scheme="4c")
+        ddts, ind = ddt(X[:, start_ind:end_ind], dt=dt, scheme="4c")
+        dShatdt.append(ddtshat)
+        ind = np.array(ind) + int((j) * Nsnapshots / Mp)
+        Shat_lst.append(q[:, ind])
+        dSdt.append(ddts)
+
+    # update config file with truncation order r
+    config["robparams"] = {"r": int(r)}
+
+    Shat_py = np.concatenate(Shat_lst, axis=1)
+    dShatdt_py = np.concatenate(dShatdt, axis=1).T
+    dSdt_py = np.hstack(dSdt)
+
+    print("Shape of Shat_py: ", Shat_py.shape)
+    print("Shape of dShatdt_py: ", dShatdt_py.shape)
+    # [operators] = inferOperators_NL(Shat, U, params, dShatdt);
+
+    # operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
+    # operators = infer_operators_nl(q, None, config['params'], /dShatdt_py)
+
+    config["robparams"] = {"r": int(r)}
+
+    N = int(config["N"])
+    dt = config["dt"]
+    T_end = config["T_end"]
+    mus = config[
+        "mus"
+    ]  # Assuming mus is saved as a string that represents a Python expression
+    Mp = config["Mp"]
+    K = int(config["K"])
+    DS = config["DS"]
+    params = config["params"]  # This will be a dictionary in Python
+    robparams = config["robparams"]  # This will be a dictionary in Python
+
+    coord = np.linspace(0, 1, N)
+    print("coord = ", coord.shape)
+    IC = np.array([initial_condition(c, mu_test) for c in coord])
+    q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
+    time_domain = np.arange(0, T_end, dt)
+    train_size = Shat_py.shape[1] // len(mus)
+
+    # regs = [1e1, 3e3, 1e9]
+    # regs = [0.001, 20, 1e5]
+    # Shat_true = Shat_lst[2]
+    Shat_true = Vr.T @ (X_all_test.T[:, : Train_T + 1] - X_ref)
+
+    # regs_product = [1e-3, 1e1, 10, 1e1, 1e4, 15, 1e-3, 1e7, 10]
+    # regs_product = [1e-3, 1e-3, 1, 23, 60, 10]
+    # regs_product = [1e-3, 1e-2, 5, 1e-3, 1e-2, 5, 1e-3, 1e-1, 5]
+
+    # [1000.0, 200.00000000000003, 26.826957952797258]
+
+    # regs_product = [1e1, 1e3, 3, 1e1, 1e3, 10, 1e1, 1e6, 15]  # for r=5, 5e-2 error
+    # regs_product = [1e1, 1e3, 4, 1e2, 1e3, 10, 1e1, 1e6, 10] # for r=12, 1e-2 error
+
+    # using this now for r=8!
+    # regs_product = [1e-2, 1e-2, 1, 1e1, 1e5, 6, 1e3, 1e10, 7]  # for r=5, 5e-2 error
+
+    regs_product = [1e-2, 1e2, 5, 1e1, 1e5, 5, 1e1, 1e10, 10]
+
+    regs, errors = train_gridsearch(
+        Shat_py,
+        dShatdt_py,
+        Shat_true,
+        train_size,
+        r,
+        regs_product,
+        time_domain,
+        q0,
+        params,
+        testsize=None,
+        margin=1.1,
+    )
+
+    regs_lst_vary_q.append(regs)
+    reduce_state_errors_vary_q.append(errors)
+
+    params["lambda1"] = regs[0]
+    params["lambda2"] = regs[1]
+    if len(regs) > 2:
+        params["lambda3"] = regs[2]
+
+    operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
+
+    # compute the full time series
+    coord = np.linspace(0, 1, N)
+    print("coord = ", coord.shape)
+    IC = np.array([initial_condition(c, mu_test) for c in coord])
+    q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
+
+    T_end_full = 8
+    time_domain_full = np.arange(0, T_end_full, dt)
+
+    multi_indices = generate_multi_indices_efficient(len(q0), p=p)
+
+    modelform = config["params"]["modelform"]
+    out_full = scipy.integrate.solve_ivp(
+        rhs,  # Integrate this function
+        [time_domain_full[0], time_domain_full[-1]],  # over this time interval
+        q0,  # from this initial condition
+        t_eval=time_domain_full,  # evaluated at these points
+        args=[operators, params, None, multi_indices],  # additional arguments to rhs
+    )
+
+    s_hat_full = out_full.y
+    poly_full = np.concatenate(polynomial_form(s_hat_full, p=p), axis=0)
+    print("Poly shape: ", poly_full.shape)
+
+    s_rec_full = X_ref + Vr @ s_hat_full + Vbar @ Xi @ poly_full
+
+    T_end_index = int(T_end / dt)
+
+    abs_error_full = np.abs(X_all_test.T - s_rec_full)
+    relative_error_window = np.linalg.norm(
+        X_all_test.T[:, T_end_index:] - s_rec_full[:, T_end_index:], "fro"
+    ) / np.linalg.norm(X_all_test.T[:, T_end_index:], "fro")
+    relative_error_training_window = np.linalg.norm(
+        X_all_test.T[:, :T_end_index] - s_rec_full[:, :T_end_index], "fro"
+    ) / np.linalg.norm(X_all_test.T[:, :T_end_index], "fro")
+
+    abs_error_full_lst_vary_q.append(abs_error_full)
+    relative_error_testing_window_lst_vary_q.append(relative_error_window)
+    relative_error_training_window_lst_vary_q.append(relative_error_training_window)
+
+
+# save the results as pickle
+with open("OpInfPoly_Results_Err_Analysis_vary_q_MAM.pkl", "wb") as f:
+    pickle.dump(
+        {
+            "energy_lst": energy_list_vary_q,
+            "regs_lst_vary_q": regs_lst_vary_q,
+            "errors": reduce_state_errors_vary_q,
+            "relative_error_training": relative_error_training_window_lst_vary_q,
+            "relative_error_testing": relative_error_testing_window_lst_vary_q,
+        },
+        f,
+    )

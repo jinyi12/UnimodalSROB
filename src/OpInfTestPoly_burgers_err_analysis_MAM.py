@@ -475,9 +475,7 @@ for err_tol in err_tols:
     U, S, V = np.linalg.svd((X - X_ref), full_matrices=False)
     # print("S = ", S[:5])
     eigvals_SVD = S**2 * (1 / (len(S) - 1))
-    # print("eigvals_SVD = \n", eigvals_SVD[:5])
-    # append U
-    # print("U = ", U.shape)
+
     rob_lst.append(U)
 
     # calculate the relative error
@@ -519,35 +517,10 @@ for i in range(len(err_tols)):
     print("num_snapshots: ", num_snapshots)
     # print("X = ", X.shape)
     X_ref = np.mean(X, axis=1)[:, None]
-    # X_ref = np.zeros((X.shape[0]))[:, None]
-    X_centered = X - X_ref
 
-    U, S, W = np.linalg.svd(X_centered, full_matrices=False)
-
-    Vr = U[:, :r]
-    Vbar = U[:, r : r + q_trunc]
-    q = Vr.T @ X_centered
-    Proj_error = X_centered - (Vr @ q)
-    Poly = np.concatenate(polynomial_form(q, p), axis=0)
-    Xi = (
-        Vbar.T
-        @ Proj_error
-        @ Poly.T
-        @ np.linalg.inv(Poly @ Poly.T + gamma * np.identity((p - 1) * r))
+    q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(
+        X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None
     )
-
-    Gamma_MPOD = X_ref + (Vr @ q) + (Vbar @ Xi @ Poly)
-    print(f"Reconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
-
-    energy = (
-        np.linalg.norm(Vr @ q + (Vbar @ Xi @ Poly), "fro") ** 2
-        / np.linalg.norm(X - X_ref, "fro") ** 2
-    )
-    print(f"Energy: {energy:.4e}")
-    print("\n")
-
-    # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization(X, X_ref, num_snapshots, max_iter, tol, gamma, r, q_trunc, p, initial_Shat=None)
-    # q, energy, Xi, Vr, Vbar, Poly = alternating_minimization_jax(X, X_ref, num_snapshots, max_iter, 1e-3, gamma, r, q_trunc, p, initial_Shat=None)
 
     energy_list.append(energy)
     Vr_lst.append(Vr)
@@ -575,13 +548,6 @@ abs_error_full_lst = []
 regs_lst = []
 reduced_state_errors = []
 
-
-# regs_lst_poly_vary_r = np.array([[129.1549665014884, 200.00000000000003, 1389.4954943731373],
-#     [1000.0, 200.00000000000003, 26.826957952797258],
-#     [10.0, 130.3672689737678, 10000000.0],
-#     [10.0, 44.721359549995796, 10000000.0],
-#     [100.0, 200.00000000000003, 10000000.0]
-# ])
 
 for err_idx in range(len(err_tols)):
     # for i in range(1):
@@ -625,10 +591,6 @@ for err_idx in range(len(err_tols)):
 
     print("Shape of Shat_py: ", Shat_py.shape)
     print("Shape of dShatdt_py: ", dShatdt_py.shape)
-    # [operators] = inferOperators_NL(Shat, U, params, dShatdt);
-
-    # operators = infer_operators_nl(Shat_py, None, config["params"], dShatdt_py)
-    # operators = infer_operators_nl(q, None, config['params'], /dShatdt_py)
 
     config["robparams"] = {"r": int(r)}
 
@@ -653,20 +615,7 @@ for err_idx in range(len(err_tols)):
 
     print("Train size: ", train_size)
 
-    # regs = [1e1, 3e3, 1e9]
-    # regs = [0.001, 20, 1e5]
-    # Shat_true = Shat_lst[2]
-
     Shat_true = Vr.T @ (X_all_test.T[:, : Train_T + 1] - X_ref)
-
-    # regs_product = [1e0, 1e2, 15, 3e1, 1e3, 15, 1e7, 1e7, 1]
-    # regs_product = [1e1, 1e3, 10, 1e1, 2e2, 15, 1e1, 1e7, 15]
-    # regs_product = [1e0, 2e2, 5, 1e1, 2e2, 5, 1e7, 1e7, 1]
-    # regs_product = [1e1, 1e1, 1, 1e2, 1e2, 1, 1e7, 1e7, 1]
-
-    # regs_product = [regs_lst_poly_vary_r[err_idx][0], regs_lst_poly_vary_r[err_idx][0], 1,
-    #                 regs_lst_poly_vary_r[err_idx][1], regs_lst_poly_vary_r[err_idx][1], 1,
-    #                 regs_lst_poly_vary_r[err_idx][2], regs_lst_poly_vary_r[err_idx][2], 1]
 
     if err_idx == 0:
         # regs_product = [1e-1, 1e-1, 1, 1e1, 1e4, 10, 1e3, 1e8, 10]
@@ -688,10 +637,11 @@ for err_idx in range(len(err_tols)):
         regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e6, 1e10, 4]
 
     # elif err_idx == len(err_tols) - 1:
-    #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e5, 1e5, 1]
+    #     regs_product = [1e-1, 1e-1, 1, 1e1, 1e3, 5, 1e5, 1e10, 5]
 
     # elif err_idx == len(err_tols) - 2:
-    #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e6, 1e6, 1]
+    #     regs_product = [1e-1, 1e-1, 1, 1e1, 1e3, 5, 1e6, 1e10, 4]
+
     elif err_idx == len(err_tols) - 1:
         regs_product = [1e-2, 1e-1, 3, 1e1, 1e3, 10, 1e5, 1e10, 5]
 
@@ -781,7 +731,7 @@ results = {
     "relative_error_testing": relative_error_testing_window_lst,
 }
 
-with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
+with open("OpInfPoly_Results_Err_Analysis_vary_r_MAM.pkl", "wb") as f:
     pickle.dump(results, f)
 
 

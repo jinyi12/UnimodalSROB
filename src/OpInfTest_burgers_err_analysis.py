@@ -12,7 +12,9 @@ import scienceplots
 plt.style.use(["science", "no-latex", "grid"])
 
 # %%
-mus = [1.1, 1.05, 1, 0.95, 0.9]
+# mus = [1.1, 1.05, 1, 0.95, 0.9]
+mus = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+mu_test = 0.98
 # Load data
 
 p = 2
@@ -21,7 +23,7 @@ dt = 1e-3
 T_end = 2
 
 config = {
-    "N": 2**7 + 1 + 1,
+    "N": 2**8 + 1,
     "dt": 1e-3,
     "T_end": T_end,
     "mus": list(mus),
@@ -32,7 +34,7 @@ config = {
         "modelform": "LQC",
         "modeltime": "continuous",
         "dt": dt,
-        "ddt_order": "BE",
+        "ddt_order": "4c",
         "p": p, # polynomial order
         "lambda1": 5e-2,
         "lambda2": 5e-2,
@@ -46,7 +48,11 @@ config = {
 
 # %%
 Train_T = int(T_end/dt)
-X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")[:, :Train_T+1, :]
+# X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")[:, :Train_T+1, :]
+X_all = np.load("/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy")[:, :Train_T+1, :]
+X_all_test = np.load(
+    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
+)[0]
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE100.npy")
 print(X_all.shape)
 
@@ -168,8 +174,11 @@ def rhs(t, state, operators, multi_indices, modelform, input_func=None):
 
 # %%
 err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
+# err_tols = [1e-1, 5e-2, 3e-2, 1e-2]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
+
+fig, ax = plt.subplots(figsize=(6, 4.5))
 for err_tol in err_tols:
     rob_lst = []
     rel_err_SVD_lst = []
@@ -179,8 +188,8 @@ for err_tol in err_tols:
     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
     
     # X_ref is the reference state which is just defined as the mean of the snapshots 
-    # X_ref = np.mean(X, axis=1)[:, None]
-    X_ref = np.zeros((X.shape[0], 1))
+    X_ref = np.mean(X, axis=1)[:, None]
+    # X_ref = np.zeros((X.shape[0], 1))
     
     # print("X = ", X.shape)
     # print("X_ref = ", X_ref.shape)
@@ -206,6 +215,20 @@ for err_tol in err_tols:
 
     print("max idx = ", max(idx_lst))
     max_idx_lst.append(max(idx_lst))
+    
+    ax.plot(idx, rel_err_SVD[idx], 'ro', label=f"{err_tol:.1e} at r={idx}")
+    ax.set_yscale('log')
+    ax.set_ylabel("$\epsilon(r)$ (log scale)")
+    
+ax.plot(rel_err_SVD_lst[0], label=f"$\epsilon(r)$")
+# set limit
+ax.set_xlim([0, 200])
+# ax.set_ylim([1e-13, 1e-3])
+# show grid
+ax.grid(True, alpha=0.2)
+ax.set_xlabel("Rank r")
+ax.set_title("Relative error, Nominal RE1000")
+ax.legend()
 
 # %%
 # p = 3
@@ -226,8 +249,8 @@ for i in range(len(err_tols)):
     num_snapshots = X.shape[1]
     print("num_snapshots: ", num_snapshots)
     # print("X = ", X.shape)
-    # X_ref = np.mean(X, axis=1)[:, None]
-    X_ref = np.zeros((X.shape[0]))[:, None]
+    X_ref = np.mean(X, axis=1)[:, None]
+    # X_ref = np.zeros((X.shape[0]))[:, None]
     X_centered = X - X_ref
 
     U, S, V = np.linalg.svd(X_centered, full_matrices=False)
@@ -247,7 +270,6 @@ for i in range(len(err_tols)):
 
 
 # %%
-X_all_full = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")
 relative_error_testing_window_lst = []
 relative_error_training_window_lst = []
 abs_error_full_lst = []
@@ -259,8 +281,8 @@ for err_idx in range(len(err_tols)):
     # err_idx = 1
 
     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
-    # X_ref = np.mean(X, axis=1)[:, None]
-    X_ref = np.zeros((X.shape[0]))[:, None]
+    X_ref = np.mean(X, axis=1)[:, None]
+    # X_ref = np.zeros((X.shape[0]))[:, None]
     X_centered = X - X_ref
     
     Vr = Vr_lst[err_idx]
@@ -278,16 +300,16 @@ for err_idx in range(len(err_tols)):
         end_ind = int((j+1) * Nsnapshots/Mp)
         print("start_ind: ", start_ind)
         print("end_ind: ", end_ind)
-        ddtshat, ind = ddt(q[:, start_ind:end_ind], dt=dt, scheme='BE')
+        ddtshat, ind = ddt(q[:, start_ind:end_ind], dt=dt, scheme='4c')
         # ddts, ind = ddt(X[:, start_ind:end_ind], dt=dt, scheme="BE")
         dShatdt.append(ddtshat)
         ind = np.array(ind) + int((j) * Nsnapshots/Mp)
         Shat_lst.append(q[:, ind])
         # dSdt.append(ddts)
     
-    def initial_condition(coord):
+    def initial_condition(coord, mu):
         if coord <= 0.5:
-            return np.sin(2 * np.pi * coord)
+            return mu * np.sin(2 * np.pi * coord)
         
         return 0
 
@@ -324,14 +346,14 @@ for err_idx in range(len(err_tols)):
 
     coord = np.linspace(0, 1, N)
     print("coord = ", coord.shape)
-    IC = np.array([initial_condition(c) for c in coord])
+    IC = np.array([initial_condition(c, mu_test) for c in coord])
     q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
     time_domain = np.arange(0, T_end, dt)
-    train_size = Shat_py.shape[1]
+    train_size = Shat_py.shape[1] // len(mus)
 
 
-    Shat_true = Shat_lst[2]
-    regs_product = [1e-3, 2e1, 15, 1e-3, 2e1, 15]
+    Shat_true = Vr.T @ (X_all_test.T[:, : Train_T + 1] - X_ref)
+    regs_product = [1e-1, 1e3, 5, 1e-1, 1e7, 10]
     # regs_product = [1e0, 1e0, 1, 1e0, 1e0, 1]
     # regs_product = [1e-3, 1e-3, 1, 23, 60, 10]
     # regs_product = [1e-3, 1e-2, 5, 1e-3, 1e-2, 5, 1e-3, 1e-1, 5]
@@ -359,7 +381,7 @@ for err_idx in range(len(err_tols)):
     # compute the full time series
     coord = np.linspace(0, 1, N)
     print("coord = ", coord.shape)
-    IC = np.array([initial_condition(c) for c in coord])
+    IC = np.array([initial_condition(c, mu_test) for c in coord])
     q0 = Vr.T @ (IC[:, None] - X_ref).flatten()
 
     T_end_full = 8
@@ -384,11 +406,11 @@ for err_idx in range(len(err_tols)):
     # convert values close to zero to zero
     
     
-    abs_error_full = np.abs(X_all_full[2].T - s_rec_full)
+    abs_error_full = np.abs(X_all_test.T - s_rec_full)
     T_end_index = int(T_end/dt)
     
-    relative_error_testing_window = np.linalg.norm(X_all_full[2].T[:, T_end_index:] - s_rec_full[:, T_end_index:], 'fro') / np.linalg.norm(X_all_full[2].T[:, T_end_index:], 'fro')
-    relative_error_training_window = np.linalg.norm(X_all_full[2].T[:, :T_end_index] - s_rec_full[:, :T_end_index], 'fro') / np.linalg.norm(X_all_full[2].T[:, :T_end_index], 'fro')
+    relative_error_testing_window = np.linalg.norm(X_all_test.T[:, T_end_index:] - s_rec_full[:, T_end_index:], 'fro') / np.linalg.norm(X_all_test.T[:, T_end_index:], 'fro')
+    relative_error_training_window = np.linalg.norm(X_all_test.T[:, :T_end_index] - s_rec_full[:, :T_end_index], 'fro') / np.linalg.norm(X_all_test.T[:, :T_end_index], 'fro')
     
     # convert values close to zero to zero
     # tolerance = 1e-10  # adjust this value as needed
@@ -407,6 +429,29 @@ print("Regs: ", regs_lst)
 print("errors: ", reduced_state_errors)
 print("Relative Errors: ", relative_error_testing_window_lst)
 
+# %%
+plt.figure(figsize=(6, 6))
+# plot the relative error as a function of r and label each with the corresponding error tolerance
+plt.plot(max_idx_lst, relative_error_testing_window_lst, marker='o', label='Relative Error Testing Window')
+plt.plot(max_idx_lst, relative_error_training_window_lst, marker='o', label='Relative Error Training Window')
+
+# mark the points with the corresponding snapshot energy
+for i, txt in enumerate(err_tols):
+    plt.annotate(f"Eigval err: {txt:.4%}", (max_idx_lst[i], relative_error_testing_window_lst[i]), textcoords="offset points", xytext=(0,5), ha='center')
+
+plt.semilogy()
+plt.xlabel("r")
+plt.ylabel("Relative Error of Solution")
+plt.title("Relative Error of Solution vs. Trucated dimension r, No Polynomials")
+plt.xticks(max_idx_lst)
+plt.legend()
+
+# %%
+# %%
+print("Regs: ", regs_lst)
+print("errors: ", reduced_state_errors)
+print("Relative Errors: ", relative_error_testing_window_lst)
+
 # save the results as pickle
 import pickle
 
@@ -420,3 +465,5 @@ results = {
 
 with open("OpInfTest_Results_Err_Analysis.pkl", "wb") as f:
     pickle.dump(results, f)
+
+

@@ -71,7 +71,7 @@ def get_x_sq(X):
 #         multi_indices = generate_multi_indices_efficient(N, p)
 
 #     max_degree = 2 * p
-    
+
 #     powers = jax.vmap(lambda x: jnp.power(x, jnp.arange(1, max_degree + 1)[:, None]), in_axes=0, out_axes=0)(X)
 
 #     resultArray = jax.vmap(
@@ -87,6 +87,7 @@ def get_x_sq(X):
 #     )(multi_indices)
 
 #     return resultArray
+
 
 @numba.njit(parallel=False, fastmath=True)
 def gen_poly(X, p, multi_indices=None):
@@ -258,6 +259,7 @@ def calculate_combinatorial(r, p):
     # Total unique monomials is the sum of single and two-variable counts
     total_unique_monomials = single_variable_count + two_variable_count
     return int(total_unique_monomials)
+
 
 @numba.njit(fastmath=True, parallel=False)
 def tikhonov_poly(b, A, size_params, k1, k2, k3):
@@ -537,7 +539,6 @@ def train_minimize(
         # Calculate integrated relative errors in the reduced space.
         # return Lp_error(Qtrue, q_rom[:, :trainsize], time_domain[:trainsize])[1]
         return Lp_error(Qtrue, q_rom, time_domain)[1]
-    
 
     opt_result = scipy.optimize.minimize(
         training_error,
@@ -572,13 +573,12 @@ def train_minimize(
         message = "Regularization search optimization FAILED"
         print(message)
         logging.info(message)
-        
-        
+
+
 def make_lsoda_func(operators, multi_indices):
-    
+
     # def rhs(t, x, du, p):
-        
-    
+
     return
 
 
@@ -617,7 +617,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
     if "L" in modelform:
         out += operators["A"] @ state
 
-    if 'Q' in modelform:
+    if "Q" in modelform:
         # ssq = get_x_sq(state[:, None].T).T  # Assuming get_x_sq can handle the shape
         # out += operators['F'] @ ssq.flatten()
         # print("adding F")
@@ -641,6 +641,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
         # out += operators["C"]
 
     return out
+
 
 def train_gridsearch(
     Q_,
@@ -714,10 +715,9 @@ def train_gridsearch(
     # rom._construct_solver(None, Q_, Qdot_, U, np.ones(d))
 
     # Test each regularization hyperparameter.
-    
-    
+
     # funcptr = rhs.address
-    
+
     num_tests = np.prod([grid.size for grid in grids])
     print(f"TRAINING {num_tests} ROMS")
 
@@ -755,12 +755,11 @@ def train_gridsearch(
                 args=[operators, params, None, multi_indices],
             )
             # out = lsoda(funcptr, q0, time_domain, args=[operators, None, multi_indices])
-            
-            
+
         if out.status != 0:
             print("INTEGRATION FAILED at t = ", out.t[-1])
             continue
-            
+
         q_rom = out.y
 
         # Check for boundedness of solution.
@@ -775,8 +774,8 @@ def train_gridsearch(
                 errors_pass[tuple(regs)] = Lp_error(Qtrue, q_rom, time_domain)[1]
         else:
             print("BOUND EXCEEDED")
-            errors_fail[tuple(regs)] = _MAXFUN            
-            
+            errors_fail[tuple(regs)] = _MAXFUN
+
     # Choose and save the ROM with the least error.
     if not len(errors_pass.keys()) > 0:
         print(errors_pass)
@@ -785,10 +784,9 @@ def train_gridsearch(
         logging.info(message)
         return
 
-    err2reg = {err:reg for reg,err in errors_pass.items()}
+    err2reg = {err: reg for reg, err in errors_pass.items()}
     regs = list(err2reg[min(err2reg.keys())])
-    logging.info(f"Best regularization for k={trainsize:d}, r={r:d}: "
-                 f"{(regs)}")
+    logging.info(f"Best regularization for k={trainsize:d}, r={r:d}: " f"{(regs)}")
     min_err = min(errors_pass.values())
     return regs, min_err
 
@@ -951,17 +949,22 @@ def infer_operators_nl(Shat, U, params, rhs=None):
     D, size_params = get_data_matrix(Shat, U, ind, params["modelform"], params["p"])
 
     print("Obtained data matrix...")
-    
+
     size_params_numba = Dict.empty(
-        key_type = types.unicode_type,
-        value_type = types.int64,
+        key_type=types.unicode_type,
+        value_type=types.int64,
     )
-    
+
     for key, value in size_params.items():
         size_params_numba[key] = value
 
     temp = tikhonov_poly(
-        rhs, D, size_params_numba, params["lambda1"], params["lambda2"], params["lambda3"]
+        rhs,
+        D,
+        size_params_numba,
+        params["lambda1"],
+        params["lambda2"],
+        params["lambda3"],
     ).T
     print("Solved!")
 
@@ -1066,9 +1069,9 @@ def get_data_matrix(Shat, U, ind, modelform, p):
         print("Generating ghat ...")
 
         multi_indices = generate_multi_indices_efficient(num_vars=r, p=p)
-        
+
         ghat = gen_poly(Shat, p, multi_indices=multi_indices).T
-        
+
         drp = ghat.shape[1]
         print("drp: ", drp)
     else:
@@ -1117,7 +1120,7 @@ def semi_implicit_euler_poly(Chat, Ahat, Fhat, Bhat, Phat, dt, u_input, IC, p):
     s_hat[:, 0] = IC.reshape(-1, 1).flatten()  # Ensure IC is properly shaped
 
     # Debugging prints omitted for brevity
-    
+
     multi_indices = generate_multi_indices_efficient(r, p)
 
     ImdtA = np.eye(r) - dt * Ahat
@@ -1158,7 +1161,7 @@ def semi_implicit_euler_poly_gen(Chat, Ahat, Fhat, Phat, dt, num_steps, IC, p):
     s_hat[:, 0] = IC.reshape(-1, 1).flatten()  # Ensure IC is properly shaped
 
     # Debugging prints omitted for brevity
-    
+
     multi_indices = generate_multi_indices_efficient(r, p)
 
     ImdtA = np.eye(r) - dt * Ahat

@@ -176,11 +176,11 @@ config = {
 # %%
 Train_T = int(T_end / dt)
 X_all = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE10000_mu0.4_0.1_1.2_512.npy"
 )[:, : Train_T + 1, :]
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE100.npy")
 X_all_test = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
+    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE10000_mu0.98_512.npy"
 )[0]
 print(X_all.shape)
 
@@ -456,7 +456,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
 # %%
 # err_tols = [1e-2, 1e-3, 1e-4, 1e-5]
 # err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
-err_tols = [1e-1, 5e-2, 1e-2, 5e-3, 1e-3]
+err_tols = [1e-1, 5e-2, 3e-2]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
 for err_tol in err_tols:
@@ -494,7 +494,7 @@ for err_tol in err_tols:
 
 
 tol = 1e-3  # tolerence for alternating minimization
-gamma = 0.01  # regularization parameter
+gamma = 0.001  # regularization parameter
 max_iter = 100  # maximum number of iterations
 
 Vr_lst = []
@@ -511,7 +511,8 @@ for i in range(len(err_tols)):
     print("Error Tolerance: ", err_tols[i])
     r = max_idx_lst[i]
     print("r is: ", r)
-    q_trunc = 2
+    # q_trunc = 2
+    q_trunc = 32
 
     # Procustes problem for each mu
     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
@@ -522,7 +523,7 @@ for i in range(len(err_tols)):
     # X_ref = np.zeros((X.shape[0]))[:, None]
     X_centered = X - X_ref
 
-    U, S, W = np.linalg.svd(X_centered, full_matrices=False)
+    U, S, Vr = np.linalg.svd(X_centered, full_matrices=False)
 
     Vr = U[:, :r]
     Vbar = U[:, r : r + q_trunc]
@@ -564,11 +565,6 @@ Gamma_MPOD = X_ref + (Vr @ q) + (Vbar @ Xi @ Poly)
 print(f"\nReconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
 
 # ----------------------------------------------------------------------------------------------------------------
-
-# %%
-X_all_full = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
-)
 relative_error_testing_window_lst = []
 relative_error_training_window_lst = []
 abs_error_full_lst = []
@@ -668,35 +664,42 @@ for err_idx in range(len(err_tols)):
     #                 regs_lst_poly_vary_r[err_idx][1], regs_lst_poly_vary_r[err_idx][1], 1,
     #                 regs_lst_poly_vary_r[err_idx][2], regs_lst_poly_vary_r[err_idx][2], 1]
 
-    if err_idx == 0:
-        # regs_product = [1e-1, 1e-1, 1, 1e1, 1e4, 10, 1e3, 1e8, 10]
-        regs_product = [
-            1e-2,
-            1e-2,
-            1,
-            1e2,
-            1e4,
-            15,
-            1e3,
-            1e10,
-            15,
-        ]  # for r=8, 5e-2 error
-    elif err_idx == 1:
-        regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e3, 1e10, 7]
+    # if err_idx == 0:
+    #     # regs_product = [1e-1, 1e-1, 1, 1e1, 1e4, 10, 1e3, 1e8, 10]
+    #     regs_product = [
+    #         1e-2,
+    #         1e-2,
+    #         1,
+    #         1e2,
+    #         1e4,
+    #         15,
+    #         1e3,
+    #         1e10,
+    #         15,
+    #     ]  # for r=8, 5e-2 error
+    # elif err_idx == 1:
+    #     regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e3, 1e10, 7]
 
-    elif err_idx == 2:
-        regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e6, 1e10, 4]
+    # elif err_idx == 2:
+    #     regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e6, 1e10, 4]
 
     # elif err_idx == len(err_tols) - 1:
     #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e5, 1e5, 1]
 
     # elif err_idx == len(err_tols) - 2:
     #     regs_product = [1e-1, 1e-1, 1, 1e2, 1e2, 1, 1e6, 1e6, 1]
-    elif err_idx == len(err_tols) - 1:
-        regs_product = [1e-2, 1e-1, 3, 1e1, 1e3, 10, 1e5, 1e10, 5]
 
-    elif err_idx == len(err_tols) - 2:
-        regs_product = [1e-2, 1e-1, 3, 1e1, 1e3, 10, 1e5, 1e10, 5]
+    regs_product = [
+        1e-2,
+        1e3,
+        5,
+        1e1,
+        1e8,
+        8,
+        1e3,
+        1e10,
+        7,
+    ]
 
     regs, errors = train_gridsearch(
         Shat_py,
@@ -781,7 +784,7 @@ results = {
     "relative_error_testing": relative_error_testing_window_lst,
 }
 
-with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
+with open("OpInfPoly_Results_Err_Analysis_vary_r_RE1e4.pkl", "wb") as f:
     pickle.dump(results, f)
 
 

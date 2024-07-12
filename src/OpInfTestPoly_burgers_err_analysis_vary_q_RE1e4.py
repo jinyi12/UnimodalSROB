@@ -145,14 +145,14 @@ mu_test = 0.98
 # Load data
 
 
-p = 4
+p = 2
 Mp = len(mus)
 dt = 1e-3
 T_end = 2
 
 config = {
     # "N": 2**7 + 1 + 1,
-    "N": 2**8 + 1,
+    "N": 2**11 + 1,
     "dt": 1e-3,
     "T_end": T_end,
     "mus": list(mus),
@@ -176,11 +176,11 @@ config = {
 # %%
 Train_T = int(T_end / dt)
 X_all = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_all_RE10000_mu0.4_0.1_1.2_2048_SUPG.npy"
 )[:, : Train_T + 1, :]
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE100.npy")
 X_all_test = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_RE10000_mu0.98_2048_SUPG.npy"
 )[0]
 print(X_all.shape)
 
@@ -456,7 +456,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
 # %%
 # err_tols = [1e-2, 1e-3, 1e-4, 1e-5]
 # err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
-err_tols = [1e-1, 5e-2, 1e-2, 1e-3]
+err_tols = [1e-1, 5e-2, 1e-2, 5e-3]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
 for err_tol in err_tols:
@@ -567,7 +567,7 @@ print(f"\nReconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
 # %%
 # X_all_full = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")
 X_all_full = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_all_RE10000_mu0.4_0.1_1.2_2048_SUPG.npy"
 )
 relative_error_testing_window_lst_vary_q = []
 relative_error_training_window_lst_vary_q = []
@@ -578,13 +578,14 @@ regs_lst_vary_q = []
 
 
 tol = 1e-3  # tolerence for alternating minimization
-gamma = 10  # regularization parameter
+gamma = 0.01  # regularization parameter
 max_iter = 100  # maximum number of iterations
 
 
 q_trunc_lst = [2, 2**2, 2**3, 2**4, 2**5]
-# r = max_idx_lst[1]  # 5e-2, r=5
-r = max_idx_lst[0]  # 5e-2, r=5
+r = max_idx_lst[1]  # 5e-2, r=5
+# r = max_idx_lst[0]  # 5e-2, r=5
+
 
 for q_trunc_index in range(len(q_trunc_lst)):
 
@@ -697,7 +698,18 @@ for q_trunc_index in range(len(q_trunc_lst)):
 
     # using this for r=8!
     # regs_product = [1e-2, 1e-2, 1, 1e1, 1e5, 6, 1e3, 1e10, 7]  # for r=8, 5e-2 error
-    regs_product = [1e-2, 1e1, 5, 1e1, 1e6, 6, 1e1, 1e6, 6]
+    # regs_product = [1e-2, 1e1, 5, 1e1, 1e6, 6, 1e1, 1e6, 6]
+    regs_product = [
+        1e-2,
+        1e-2,
+        1,
+        3359.818286283781,
+        3359.818286283781,
+        1,
+        10000000000,
+        10000000000,
+        1,
+    ]
 
     regs, errors = train_gridsearch(
         Shat_py,
@@ -765,7 +777,7 @@ for q_trunc_index in range(len(q_trunc_lst)):
 
 
 # save the results as pickle
-with open("OpInfPoly_Results_Err_Analysis_vary_q_p3.pkl", "wb") as f:
+with open("OpInfPoly_Results_Err_Analysis_vary_q_RE1e4.pkl", "wb") as f:
     pickle.dump(
         {
             "energy_lst": energy_list_vary_q,

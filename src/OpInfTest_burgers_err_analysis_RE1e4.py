@@ -24,7 +24,7 @@ dt = 1e-3
 T_end = 2
 
 config = {
-    "N": 2**8 + 1,
+    "N": 2**11 + 1,
     "dt": 1e-3,
     "T_end": T_end,
     "mus": list(mus),
@@ -49,10 +49,10 @@ config = {
 Train_T = int(T_end / dt)
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE1000.npy")[:, :Train_T+1, :]
 X_all = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_all_RE10000_mu0.4_0.1_1.2_2048_SUPG.npy"
 )[:, : Train_T + 1, :]
 X_all_test = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_RE10000_mu0.98_2048_SUPG.npy"
 )[0]
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE100.npy")
 print(X_all.shape)
@@ -193,7 +193,8 @@ def rhs(t, state, operators, multi_indices, modelform, input_func=None):
 # err_tols = [1e-1, 5e-2, 3e-2, 1e-2]
 
 # ! Use this for latest results
-err_tols = [1e-1, 5e-2, 1e-2, 5e-3, 1e-3]
+# err_tols = [1e-1, 5e-2, 1e-2, 5e-3, 1e-3]
+err_tols = [1e-1, 5e-2, 1e-2, 5e-3]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
 
@@ -499,5 +500,5 @@ results = {
     "relative_error_testing": relative_error_testing_window_lst,
 }
 
-with open("OpInfTest_Results_Err_Analysis.pkl", "wb") as f:
+with open("OpInfTest_Results_Err_Analysis_RE1e4.pkl", "wb") as f:
     pickle.dump(results, f)

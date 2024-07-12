@@ -455,7 +455,8 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
 
 # %%
 # err_tols = [1e-2, 1e-3, 1e-4, 1e-5]
-err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
+# err_tols = [1e-1, 5e-2, 1e-2, 1e-3, 1e-4]
+err_tols = [1e-1, 5e-2, 1e-2, 5e-2, 1e-3]
 # err_tols = [1e-1, 5e-2, 1e-2, 1e-3]
 max_idx_lst = []
 # mus = [0.01] # only one mu for now
@@ -626,7 +627,7 @@ for q_trunc_index in range(len(q_trunc_lst)):
 
     # using this for r=8!
     # regs_product = [1e-2, 1e-2, 1, 1e1, 1e5, 6, 1e3, 1e10, 7]  # for r=8, 5e-2 error
-    
+
     regs_product = [1e-2, 1e-2, 1, 69.51927961775604, 69.51927961775604, 1, 1e3, 1e3, 1]
     # regs_product = [1e-2, 1e-2, 1, 1e1, 1e3, 20, 1e3, 1e10, 7]
 
@@ -643,7 +644,7 @@ for q_trunc_index in range(len(q_trunc_lst)):
         testsize=None,
         margin=1.1,
     )
-    
+
     regs_lst_vary_q.append(regs)
     reduce_state_errors_vary_q.append(errors)
 

@@ -176,11 +176,11 @@ config = {
 # %%
 Train_T = int(T_end / dt)
 X_all = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
 )[:, : Train_T + 1, :]
 # X_all = np.load("../examples/burgers/burgersFEniCSx_u_sol_all_RE100.npy")
 X_all_test = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_RE1000_mu0.98_256.npy"
 )[0]
 print(X_all.shape)
 
@@ -511,7 +511,8 @@ for i in range(len(err_tols)):
     print("Error Tolerance: ", err_tols[i])
     r = max_idx_lst[i]
     print("r is: ", r)
-    q_trunc = 2
+    # q_trunc = 2
+    q_trunc = 8
 
     # Procustes problem for each mu
     X = np.concatenate([X_all[i, :, :] for i in range(Mp)], axis=0).T
@@ -567,7 +568,8 @@ print(f"\nReconstruction error: {relative_error(X, Gamma_MPOD, X_ref):.4%}")
 
 # %%
 X_all_full = np.load(
-    "/home/jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    "/data1/jy384/research/Data/UnimodalSROB/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
+    # /jy384/projects/UnimodalSROB/examples/burgers/burgersFEniCSx_u_sol_all_RE1000_mu0.4_0.1_1.2_256.npy"
 )
 relative_error_testing_window_lst = []
 relative_error_training_window_lst = []
@@ -781,7 +783,7 @@ results = {
     "relative_error_testing": relative_error_testing_window_lst,
 }
 
-with open("OpInfPoly_Results_Err_Analysis_vary_r.pkl", "wb") as f:
+with open("OpInfPoly_Results_Err_Analysis_vary_r_q8.pkl", "wb") as f:
     pickle.dump(results, f)
 
 

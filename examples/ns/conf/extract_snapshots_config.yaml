@@ -1,0 +1,47 @@
+defaults:
+  - _self_
+
+# Data extraction settings
+base_data_path: /data1/jy384/research/Data/UnimodalSROB/ns/
+output_base_path: ${base_data_path}
+
+# Time parameters
+t_start_train: 4
+t_end_train: 5
+t_start_test: 4
+t_end_test: 8
+dt: 0.000625
+effective_dt: null # dt between snapshots collected, calculated in the script
+
+# Number of snapshots
+num_train_snapshots: 200
+num_test_snapshots: null # To be calculated in the script.
+
+# List of mu values to process for training
+train_mu_values:
+  - 0.002000
+  - 0.001333
+  - 0.001000
+  - 0.000800
+  - 0.000667
+  - 0.000571
+  - 0.000500
+
+  - 0.001667
+  - 0.001111
+  - 0.000909
+  - 0.000714
+  - 0.000625
+  - 0.000526
+
+# Test mu value
+# test_mu_value: 0.000556
+test_mu_value: 0.001
+
+# Common parameters
+L_c: 0.1
+U_c: 1.0
+rho: 1
+
+# Extraction mode (train or test)
+mode: "train"

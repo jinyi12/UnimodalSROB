@@ -1,0 +1,27 @@
+defaults:
+  - _self_
+  - mu: mu_001000
+
+# General simulation parameters
+t: 0
+T: 8
+dt: 0.000625
+num_steps: null # We'll calculate this in the Python script
+
+# Fluid properties
+rho: 1
+
+# Geometry parameters
+L: 2.2
+H: 0.41
+c_x: 0.2
+c_y: 0.2
+r: 0.05
+
+L_c: 0.1 # Characteristic length (cylinder diameter)
+U_c: 1.0 # Characteristic velocity (average inlet velocity)
+Re: null # We'll calculate this in the Python script
+
+# Output settings
+# output_folder: ${hydra:runtime.output_dir}
+output_folder: /data1/jy384/research/Data/UnimodalSROB/ns/

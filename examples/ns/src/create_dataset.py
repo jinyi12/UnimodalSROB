@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
         input_file = folder_path / "u_snapshots_matrix_train.npy"
 
         if not input_file.exists():
-            print(f"No u_snapshots_matrix.npy file found at {input_file}. Skipping...")
+            print(f"No file found at {input_file}. Skipping...")
             continue
 
         # Load the snapshot matrix

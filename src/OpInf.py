@@ -7,7 +7,6 @@ import scipy.optimize
 import warnings
 import itertools
 import numba
-from numbalsoda import lsoda_sig, lsoda, dop853
 from numba import njit, cfunc
 from numba.typed import Dict, List
 from numba import types

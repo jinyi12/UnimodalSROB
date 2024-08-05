@@ -556,127 +556,136 @@ def train_gridsearch(
     testsize=None,
     margin=1.1,
 ):
-    """Train ROMs with the given dimension(s), saving only the ROM with
+    """
+    Train Reduced Order Models (ROMs) using grid search for hyperparameter optimization.
+
+    This function trains ROMs with the given dimension, saving only the ROM with
     the least training error that satisfies a bound on the integrated POD
-    coefficients, using a search algorithm to choose the regularization
+    coefficients. It uses a grid search algorithm to choose the regularization
     hyperparameters.
 
     Parameters
     ----------
+    Q_ : array_like
+        The full order model data.
+    Qdot_ : array_like
+        The time derivative of the full order model data.
+    Qtrue : array_like
+        The true solution data for error calculation.
     trainsize : int
-        Number of snapshots to use to train the ROM.
+        Number of snapshots to use for training the ROM.
     r : int
-        Dimension of the desired ROM. Also the number of retained POD modes
-        (left singular vectors) used to project the training data.
-    regs : (float, float, int, float, float, int)
+        Dimension of the desired ROM (number of retained POD modes).
+    regs : tuple
         Bounds and sizes for the grid of regularization hyperparameters.
-        First-order: search in [regs[0], regs[1]] at regs[2] points.
-        Quadratic:   search in [regs[3], regs[4]] at regs[5] points.
-        Poly:       search in [regs[6], regs[7]] at regs[8] points.
-    testsize : int
+        Format: (min1, max1, num1, min2, max2, num2, [min3, max3, num3])
+        Where min/max are the bounds and num is the number of points for each regularization parameter.
+    time_domain : array_like
+        Time points for integration.
+    q0 : array_like
+        Initial condition for integration.
+    params : dict
+        Dictionary containing model parameters.
+    testsize : int, optional
         Number of time steps for which a valid ROM must satisfy the POD bound.
-    margin : float ≥ 1
-        Amount that the integrated POD coefficients of a valid ROM are allowed
-        to deviate in magnitude from the maximum magnitude of the training
-        data Q, i.e., bound = margin * max(abs(Q)).
+    margin : float, optional
+        Allowed deviation factor for integrated POD coefficients (default is 1.1).
+
+    Returns
+    -------
+    tuple
+        Best regularization parameters and minimum error, or None if no stable ROMs found.
     """
 
-    _MAXFUN = 100  # Artificial ceiling for optimization routine.
+    _MAXFUN = 100  # Maximum function value for optimization routine
 
-    # Parse aguments.
+    # Validate and parse regularization parameter grids
     if len(regs) not in [6, 9]:
-        raise ValueError("expected 6 or 9 regs required (bounds / sizes of grids")
-    grids = []
-    for i in range(0, len(regs), 3):
-        check_regs(regs[i : i + 2])
-        grids.append(
-            np.logspace(np.log10(regs[i]), np.log10(regs[i + 1]), num=regs[i + 2])
+        raise ValueError(
+            "Expected 6 or 9 regularization parameters (bounds / sizes of grids)"
         )
+    grids = [
+        np.logspace(np.log10(regs[i]), np.log10(regs[i + 1]), num=regs[i + 2])
+        for i in range(0, len(regs), 3)
+    ]
 
+    # Extract model form and generate multi-indices if needed
     modelform = params["modelform"]
-    # d = check_lstsq_size(trainsize, r, modelform)
-    if "P" in modelform:
-        multi_indices = generate_multi_indices_efficient(r, params["p"])
-    else:
-        multi_indices = None
+    multi_indices = (
+        generate_multi_indices_efficient(r, params["p"]) if "P" in modelform else None
+    )
 
-    # Compute the bound to require for integrated POD modes.
+    # Compute the bound for integrated POD modes
     B = margin * np.abs(Q_).max()
 
-    # Create a solver mapping regularization hyperparameters to operators.
-    print(f"Constructing least-squares solver, r={r}")
-    # Test each regularization hyperparameter.
-
+    # Prepare for grid search
     num_tests = np.prod([grid.size for grid in grids])
+    print(f"Constructing least-squares solver, r={r}")
     print(f"TRAINING {num_tests} ROMS")
 
-    # Test each regularization hyperparameter.
     errors_pass = {}
     errors_fail = {}
+
+    # Perform grid search
     for i, regs in enumerate(itertools.product(*grids)):
-        print(f"({i+1:d}/{num_tests:d}) Testing ROM with " f"{(regs)}")
+        print(f"({i+1:d}/{num_tests:d}) Testing ROM with {regs}")
 
-        params["lambda1"] = regs[0]
-        params["lambda2"] = regs[1]
-        if len(regs) == 3:
-            params["lambda3"] = regs[2]
-        else:
-            params["lambda3"] = 0
+        # Set regularization parameters
+        params.update({f"lambda{j+1}": reg for j, reg in enumerate(regs)})
+        params["lambda3"] = params.get("lambda3", 0)  # Set lambda3 to 0 if not provided
 
-        # Train the ROM on all training snapshots.
+        # Train the ROM
         try:
             operators = infer_operators_nl(Q_, None, params, Qdot_)
-        except:
-            ("Operators inference failed, SVD failed")
+        except Exception as e:
+            print(f"Operators inference failed: {str(e)}")
             continue
 
-        # Simulate the ROM over the full domain.
+        # Simulate the ROM
+        print("Integrating...")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # q_rom = rom.predict(Q_[:,0], t, config.U, method="RK45")
-            print("Integrating...")
             out = scipy.integrate.solve_ivp(
-                rhs,  # Integrate this function
-                [time_domain[0], time_domain[-1]],  # over this time interval
-                q0,  # from this initial condition
-                t_eval=time_domain,  # evaluated at these points
+                rhs,
+                [time_domain[0], time_domain[-1]],
+                q0,
+                t_eval=time_domain,
                 vectorized=False,
                 args=[operators, params, None, multi_indices],
             )
 
         if out.status != 0:
-            print("INTEGRATION FAILED at t = ", out.t[-1])
+            print(f"INTEGRATION FAILED at t = {out.t[-1]}")
             continue
 
         q_rom = out.y
 
-        # Check for boundedness of solution.
+        # Check if solution is bounded
         if is_bounded(q_rom, B):
-            # Calculate integrated relative errors in the reduced space.
             print("Bound check passed")
-            if q_rom.shape[1] > trainsize:
-                errors_pass[tuple(regs)] = Lp_error(
-                    Qtrue[:, :trainsize], q_rom[:, :trainsize], time_domain[:trainsize]
-                )[1]
-            else:
-                errors_pass[tuple(regs)] = Lp_error(Qtrue, q_rom, time_domain)[1]
+            # Calculate integrated relative errors in the reduced space
+            error_range = min(q_rom.shape[1], trainsize)
+            errors_pass[tuple(regs)] = Lp_error(
+                Qtrue[:, :error_range],
+                q_rom[:, :error_range],
+                time_domain[:error_range],
+            )[1]
         else:
             print("BOUND EXCEEDED")
             errors_fail[tuple(regs)] = _MAXFUN
 
-    # Choose and save the ROM with the least error.
-    if not len(errors_pass.keys()) > 0:
-        print(errors_pass)
+    # Select the best ROM
+    if not errors_pass:
         message = f"NO STABLE ROMS for r={r:d}"
         print(message)
         logging.info(message)
-        return
+        return None
 
-    err2reg = {err: reg for reg, err in errors_pass.items()}
-    regs = list(err2reg[min(err2reg.keys())])
-    logging.info(f"Best regularization for k={trainsize:d}, r={r:d}: " f"{(regs)}")
-    min_err = min(errors_pass.values())
-    return regs, min_err
+    best_regs = min(errors_pass, key=errors_pass.get)
+    min_err = errors_pass[best_regs]
+
+    logging.info(f"Best regularization for k={trainsize:d}, r={r:d}: {best_regs}")
+    return best_regs, min_err
 
 
 class L2Solver:

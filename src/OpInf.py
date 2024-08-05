@@ -47,47 +47,6 @@ def get_x_sq(X):
     return X2
 
 
-# import jax
-# import jax.numpy as jnp
-
-
-# def gen_poly_jax(X, p, multi_indices=None):
-#     """
-#     Compute polynomial terms for a 2D array X transposed, where each row
-#     is a variable and each column a sample, based on provided multiIndices.
-#     The output is structured so that each row corresponds to a polynomial
-#     term and each column to a sample.
-
-#     Parameters:
-#     X (jax.numpy.ndarray): N-by-M data matrix where N is the number of variables, M is the number of samples.
-#     p (int): Degree of the polynomial.
-
-#     Returns:
-#     resultArray (jax.numpy.ndarray): Array containing the computed polynomial terms.
-#     """
-#     N, M = X.shape
-#     if multi_indices is None:
-#         multi_indices = generate_multi_indices_efficient(N, p)
-
-#     max_degree = 2 * p
-
-#     powers = jax.vmap(lambda x: jnp.power(x, jnp.arange(1, max_degree + 1)[:, None]), in_axes=0, out_axes=0)(X)
-
-#     resultArray = jax.vmap(
-#         lambda indices: jnp.prod(
-#             jnp.where(
-#                 indices[:, None] > 0,
-#                 powers[:, indices[:, None] - 1, :],
-#                 1
-#             ),
-#             axis=0
-#         ),
-#         in_axes=0, out_axes=0
-#     )(multi_indices)
-
-#     return resultArray
-
-
 @numba.njit(parallel=False, fastmath=True)
 def gen_poly(X, p, multi_indices=None):
     """
@@ -104,13 +63,8 @@ def gen_poly(X, p, multi_indices=None):
     resultArray (np.ndarray): Array containing the computed polynomial terms.
     """
     N, M = X.shape
-    # print("N: ", N)
-    # print("M: ", M)
     if multi_indices is None:
         raise ValueError("Multi-indices must be provided for this function")
-
-    # print("Generated {} multi-indices...".format(multi_indices.shape[0]))
-    # print("The multi-indices are: ", multi_indices)
 
     max_degree = 2 * p
 
@@ -148,8 +102,6 @@ def generate_multi_indices_efficient(num_vars, p):
     max_degree = 2 * p
     degrees = monomial_degrees(num_vars, max_degree)
 
-    # print("Generated {} monomial degrees...".format(degrees.shape[0]))
-
     # Vectorized filtering criteria:
     # 1. Sum of indices is between 3 and 2*p inclusive
     sum_condition = np.sum(degrees, axis=1) >= 3
@@ -161,10 +113,6 @@ def generate_multi_indices_efficient(num_vars, p):
     # 3. No entry is greater than p if there are more than one non-zero entries
     more_than_one_non_zero = np.sum(degrees > 0, axis=1) > 1
     max_condition = (np.max(degrees, axis=1) <= p) | (~more_than_one_non_zero)
-
-    # print("Amount of valid degrees for max condition: ", np.sum(max_condition))
-    # print("Amount of valid degrees for non-zero condition: ", np.sum(non_zero_condition))
-    # print("Amount of valid degrees for sum condition: ", np.sum(sum_condition))
 
     # Combine conditions using element-wise logical AND
     valid_idx = sum_condition & non_zero_condition & max_condition
@@ -226,11 +174,6 @@ def monomial_degrees(num_vars, max_degree):
     return np.array(degrees)
 
 
-# Note: Function calls are commented out to adhere to instructions. Uncomment for testing.
-# degrees = monomial_degrees(2, 3)
-# print(degrees)
-
-
 def calculate_combinatorial(r, p):
     """
     Count the total number of unique monomials.
@@ -285,9 +228,6 @@ def tikhonov_poly(b, A, size_params, k1, k2, k3):
     _, q = b.shape
     _, p = A.shape
 
-    # print("Shape of A: ", A.shape)
-    # print("Shape of b: ", b.shape)
-
     # Create the Tikhonov matrix
     l, s, mr, m, c, drp = size_params.values()
 
@@ -314,9 +254,6 @@ def tikhonov_poly(b, A, size_params, k1, k2, k3):
 
     A_plus = np.vstack((A, pseudo))
     b_plus = np.vstack((b, np.zeros((p, q))))
-
-    # print("Shape of A_plus: ", A_plus.shape)
-    # print("Shape of b_plus: ", b_plus.shape)
 
     print("Regularization parameters: ", k1, k2, k3)
 
@@ -466,12 +403,8 @@ def train_minimize(
 
     _MAXFUN = 100  # Artificial ceiling for optimization routine.
 
-    # utils.reset_logger(trainsize)
-
     # Parse aguments.
-    # modelform = get_modelform(regs)
     modelform = params["modelform"]
-    # d = check_lstsq_size(trainsize, r, modelform)
     if "P" in modelform:
         multi_indices = generate_multi_indices_efficient(r, params["p"])
     else:
@@ -479,19 +412,11 @@ def train_minimize(
 
     log10regs = np.log10(check_regs(regs))
 
-    # Load training data.
-    # t = utils.load_time_domain(testsize)
-    # Q_, Qdot_, _ = utils.load_projected_data(trainsize, r)
-    # U = config.U(t[:trainsize])
-
     # Compute the bound to require for integrated POD modes.
     B = margin * np.abs(Q_).max()
 
     # Create a solver mapping regularization hyperparameters to operators.
-    # with utils.timed_block(f"Constructing least-squares solver, r={r:d}"):
     print(f"Constructing least-squares solver, r={r}")
-    # rom = opinf.InferredContinuousROM(modelform)
-    # rom._construct_solver(None, Q_, Qdot_, U, np.ones(d))
 
     # Test each regularization hyperparameter.
     def training_error(log10regs):
@@ -502,7 +427,6 @@ def train_minimize(
         regs = list(10**log10regs)
 
         # Train the ROM on all training snapshots.
-        # with utils.timed_block(f"Testing ROM with {config.REGSTR(regs)}"):
 
         # update params
         params["lambda1"] = regs[0]
@@ -513,7 +437,6 @@ def train_minimize(
             params["lambda3"] = 0
 
         operators = infer_operators_nl(Q_, None, params, Qdot_)
-        # rom._evaluate_solver(regularizer(r, *regs))
 
         # Simulate the ROM over the full domain.
         with warnings.catch_warnings():
@@ -548,10 +471,6 @@ def train_minimize(
     )
     if opt_result.success and opt_result.fun != _MAXFUN:
         regs = list(10**opt_result.x)
-        # with utils.timed_block(f"Best regularization for k={trainsize:d}, "
-        #                        f"r={r:d}: {config.REGSTR(regs)}"):
-        #     rom._evaluate_solver(regularizer(r, *regs))
-        #     save_trained_rom(trainsize, r, regs, rom)
         params["lambda1"] = regs[0]
         params["lambda2"] = regs[1]
         if len(regs) == 3:
@@ -572,13 +491,6 @@ def train_minimize(
         message = "Regularization search optimization FAILED"
         print(message)
         logging.info(message)
-
-
-def make_lsoda_func(operators, multi_indices):
-
-    # def rhs(t, x, du, p):
-
-    return
 
 
 def rhs(t, state, operators, params, input_func=None, multi_indices=None):
@@ -617,27 +529,16 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
         out += operators["A"] @ state
 
     if "Q" in modelform:
-        # ssq = get_x_sq(state[:, None].T).T  # Assuming get_x_sq can handle the shape
-        # out += operators['F'] @ ssq.flatten()
-        # print("adding F")
         r, r2 = operators["F"].shape
         mask = ckron_indices(r)
         out += (operators["F"] @ np.prod(state[mask], axis=1)).flatten()
-        # out += (operators["F"] @ np.prod(state[mask], axis=1))
 
     if "P" in modelform:
-        gs = gen_poly(
-            state[:, None], p=p, multi_indices=multi_indices
-        )  # Assuming gen_poly is designed for column vector input
-        # gs = gen_poly(
-        #     state, p=p, multi_indices=multi_indices
-        # )  # Assuming gen_poly is designed for column vector input
+        gs = gen_poly(state[:, None], p=p, multi_indices=multi_indices)
         out += (operators["P"] @ gs).flatten()
-        # out += (operators["P"] @ gs)
 
     if "C" in modelform:
         out += operators["C"].flatten()
-        # out += operators["C"]
 
     return out
 
@@ -699,23 +600,12 @@ def train_gridsearch(
     else:
         multi_indices = None
 
-    # Load training data.
-    # t = utils.load_time_domain(testsize)
-    # Q_, Qdot_, _ = utils.load_projected_data(trainsize, r)
-    # U = config.U(t[:trainsize])
-
     # Compute the bound to require for integrated POD modes.
     B = margin * np.abs(Q_).max()
 
     # Create a solver mapping regularization hyperparameters to operators.
-    # with utils.timed_block(f"Constructing least-squares solver, r={r:d}"):
     print(f"Constructing least-squares solver, r={r}")
-    # rom = opinf.InferredContinuousROM(modelform)
-    # rom._construct_solver(None, Q_, Qdot_, U, np.ones(d))
-
     # Test each regularization hyperparameter.
-
-    # funcptr = rhs.address
 
     num_tests = np.prod([grid.size for grid in grids])
     print(f"TRAINING {num_tests} ROMS")
@@ -753,7 +643,6 @@ def train_gridsearch(
                 vectorized=False,
                 args=[operators, params, None, multi_indices],
             )
-            # out = lsoda(funcptr, q0, time_domain, args=[operators, None, multi_indices])
 
         if out.status != 0:
             print("INTEGRATION FAILED at t = ", out.t[-1])
@@ -1085,14 +974,6 @@ def get_data_matrix(Shat, U, ind, modelform, p):
         XU = np.empty((K, 0))
         mr = 0
 
-    # print("Shape of Shat: ", Shat.shape)
-    # print("Shape of Ssq: ", Ssq.shape)
-    # print("Shape of XU: ", XU.shape)
-    # print("Shape of U0: ", U0.shape)
-    # print("Shape of Y: ", Y.shape)
-    # print("Shape of ghat: ", ghat.shape)
-
-    # D = np.hstack([Shat.T, Ssq, XU, U0, Y, ghat])
     D = np.hstack([x for x in [Shat.T, Ssq, XU, U0, Y, ghat] if x.size > 0])
 
     size_params = {

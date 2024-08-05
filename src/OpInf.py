@@ -364,6 +364,13 @@ def regularizer(r, λ1, λ2, λ3=None):
     return diag𝚪
 
 
+import numpy as np
+import scipy.optimize
+import scipy.integrate
+import warnings
+import logging
+
+
 def train_minimize(
     Q_,
     Qdot_,
@@ -377,91 +384,108 @@ def train_minimize(
     testsize=None,
     margin=1.1,
 ):
-    """Train ROMs with the given dimension(s), saving only the ROM with
+    """
+    Train Reduced Order Models (ROMs) using optimization for hyperparameter selection.
+
+    This function trains ROMs with the given dimension, saving only the ROM with
     the least training error that satisfies a bound on the integrated POD
-    coefficients, using a search algorithm to choose the regularization
+    coefficients. It uses an optimization algorithm to choose the regularization
     hyperparameters.
 
     Parameters
     ----------
+    Q_ : array_like
+        The full order model data.
+    Qdot_ : array_like
+        The time derivative of the full order model data.
+    Qtrue : array_like
+        The true solution data for error calculation.
     trainsize : int
-        Number of snapshots to use to train the ROM.
+        Number of snapshots to use for training the ROM.
     r : int
-        Dimension of the desired ROM. Also the number of retained POD modes
-        (left singular vectors) used to project the training data.
-    regs : two positive floats
-        Initial guesses for the regularization hyperparameters (non-quadratic,
-        quadratic) to use in the Operator Inference least-squares problem
-        for training the ROM.
-    testsize : int
+        Dimension of the desired ROM (number of retained POD modes).
+    regs : tuple
+        Initial guesses for the regularization hyperparameters.
+    time_domain : array_like
+        Time points for integration.
+    q0 : array_like
+        Initial condition for integration.
+    params : dict
+        Dictionary containing model parameters.
+    testsize : int, optional
         Number of time steps for which a valid ROM must satisfy the POD bound.
-    margin : float ≥ 1
-        Amount that the integrated POD coefficients of a valid ROM are allowed
-        to deviate in magnitude from the maximum magnitude of the training
-        data Q, i.e., bound = margin * max(abs(Q)).
+    margin : float, optional
+        Allowed deviation factor for integrated POD coefficients (default is 1.1).
+
+    Returns
+    -------
+    tuple
+        Best regularization parameters, operators, and errors, or None if optimization fails.
     """
 
-    _MAXFUN = 100  # Artificial ceiling for optimization routine.
+    _MAXFUN = 100  # Maximum function value for optimization routine
 
-    # Parse aguments.
+    # Set up model parameters
     modelform = params["modelform"]
-    if "P" in modelform:
-        multi_indices = generate_multi_indices_efficient(r, params["p"])
-    else:
-        multi_indices = None
+    multi_indices = (
+        generate_multi_indices_efficient(r, params["p"]) if "P" in modelform else None
+    )
 
+    # Convert regularization parameters to log scale
     log10regs = np.log10(check_regs(regs))
 
-    # Compute the bound to require for integrated POD modes.
+    # Compute the bound for integrated POD modes
     B = margin * np.abs(Q_).max()
 
-    # Create a solver mapping regularization hyperparameters to operators.
     print(f"Constructing least-squares solver, r={r}")
 
-    # Test each regularization hyperparameter.
     def training_error(log10regs):
-        """Return the training error resulting from the regularization
-        parameters λ1 = 10^log10regs[0], λ1 = 10^log10regs[1]. If the
-        resulting model violates the POD bound, return "infinity".
         """
-        regs = list(10**log10regs)
+        Calculate training error for given regularization parameters.
 
-        # Train the ROM on all training snapshots.
+        Parameters
+        ----------
+        log10regs : array_like
+            Log10 of regularization parameters.
 
-        # update params
-        params["lambda1"] = regs[0]
-        params["lambda2"] = regs[1]
-        if len(regs) == 3:
-            params["lambda3"] = regs[2]
-        else:
-            params["lambda3"] = 0
+        Returns
+        -------
+        float
+            Training error or _MAXFUN if bound is violated.
+        """
+        regs = 10**log10regs
 
+        # Update regularization parameters
+        params.update({f"lambda{i+1}": reg for i, reg in enumerate(regs)})
+        params["lambda3"] = params.get("lambda3", 0)  # Set lambda3 to 0 if not provided
+
+        # Train the ROM
         operators = infer_operators_nl(Q_, None, params, Qdot_)
 
-        # Simulate the ROM over the full domain.
+        # Simulate the ROM
+        print("Integrating...")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # q_rom = rom.predict(Q_[:,0], t, config.U, method="RK45")
-            print("Integrating...")
             out = scipy.integrate.solve_ivp(
-                rhs,  # Integrate this function
-                [time_domain[0], time_domain[-1]],  # over this time interval
-                q0,  # from this initial condition
-                t_eval=time_domain,  # evaluated at these points
+                rhs,
+                [time_domain[0], time_domain[-1]],
+                q0,
+                t_eval=time_domain,
                 args=[operators, params, None, multi_indices],
             )
         q_rom = out.y
-        # Check for boundedness of solution.
+
+        # Check for boundedness of solution
         if not is_bounded(q_rom, B):
             return _MAXFUN * np.abs(q_rom).max()
 
-        print("Error: ", Lp_error(Qtrue, q_rom, time_domain)[1])
-        print("regs: ", regs)
+        # Calculate and return the error
+        error = Lp_error(Qtrue, q_rom, time_domain)[1]
+        print(f"Error: {error}")
+        print(f"regs: {list(regs)}")
+        return error
 
-        # Calculate integrated relative errors in the reduced space.
-        # return Lp_error(Qtrue, q_rom[:, :trainsize], time_domain[:trainsize])[1]
-        return Lp_error(Qtrue, q_rom, time_domain)[1]
-
+    # Perform optimization
     opt_result = scipy.optimize.minimize(
         training_error,
         log10regs,
@@ -469,28 +493,36 @@ def train_minimize(
         tol=1e-9,
         options={"adaptive": True},
     )
-    if opt_result.success and opt_result.fun != _MAXFUN:
-        regs = list(10**opt_result.x)
-        params["lambda1"] = regs[0]
-        params["lambda2"] = regs[1]
-        if len(regs) == 3:
-            params["lambda3"] = regs[2]
 
-        print(f"Best regularization for k={trainsize:d}, r={r}: {regs}")
+    if opt_result.success and opt_result.fun != _MAXFUN:
+        # Optimization successful
+        best_regs = 10**opt_result.x
+        params.update({f"lambda{i+1}": reg for i, reg in enumerate(best_regs)})
+
+        print(f"Best regularization for k={trainsize:d}, r={r}: {list(best_regs)}")
+
+        # Train final model with best parameters
         operators = infer_operators_nl(Q_, None, params, Qdot_)
+
+        # Simulate final model
         q_rom = scipy.integrate.solve_ivp(
-            rhs,  # Integrate this function
-            [time_domain[0], time_domain[-1]],  # over this time interval
-            q0,  # from this initial condition
-            t_eval=time_domain,  # evaluated at these points
+            rhs,
+            [time_domain[0], time_domain[-1]],
+            q0,
+            t_eval=time_domain,
             args=[operators, params, None, multi_indices],
         ).y
+
+        # Calculate final errors
         errors = Lp_error(Qtrue, q_rom[:, :trainsize], time_domain[:trainsize])
-        return regs, operators, errors
+
+        return list(best_regs), operators, errors
     else:
+        # Optimization failed
         message = "Regularization search optimization FAILED"
         print(message)
         logging.info(message)
+        return None
 
 
 def rhs(t, state, operators, params, input_func=None, multi_indices=None):
@@ -519,7 +551,6 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
     modelform = params["modelform"]
     state = np.atleast_1d(state)
     p = params["p"]
-    # print("State shape: ", state.shape)
     if multi_indices is None and "P" in modelform:
         multi_indices = generate_multi_indices_efficient(state.shape[0], p)
 

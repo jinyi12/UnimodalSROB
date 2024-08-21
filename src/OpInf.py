@@ -576,7 +576,7 @@ def rhs(t, state, operators, params, input_func=None, multi_indices=None):
 
 def train_gridsearch(
     Q_,
-    Qdot_,
+    Qdot_transpose,
     Qtrue,
     trainsize,
     r,
@@ -598,9 +598,9 @@ def train_gridsearch(
     Parameters
     ----------
     Q_ : array_like
-        The full order model data.
-    Qdot_ : array_like
-        The time derivative of the full order model data.
+        The full order model data. r-by-K matrix where r is the number of variables and K is the number of snapshots.
+    Qdot_transpose : array_like
+        The time derivative of the full order model data. K-by-r matrix.
     Qtrue : array_like
         The true solution data for error calculation.
     trainsize : int
@@ -667,7 +667,7 @@ def train_gridsearch(
 
         # Train the ROM
         try:
-            operators = infer_operators_nl(Q_, None, params, Qdot_)
+            operators = infer_operators_nl(Q_, None, params, Qdot_transpose)
         except Exception as e:
             print(f"Operators inference failed: {str(e)}")
             continue
@@ -824,7 +824,9 @@ def infer_operators_nl(Shat, U, params, rhs=None):
 
     Parameters:
     Shat (np.ndarray): N-by-K full state data matrix.
+
     U (np.ndarray): K-by-m input data matrix.
+
     params (dict): Parameters for operator inference:
         modelform (str): Indicates which terms to learn, e.g. 'LI' for linear model with input.
         modeltime (str): 'continuous' or 'discrete'.
@@ -834,6 +836,7 @@ def infer_operators_nl(Shat, U, params, rhs=None):
         lambda3 (float): L2 penalty weighting for polynomial term.
         p (int): Degree of the polynomial.
         scale (bool): If True, scale data matrix to within [-1, 1] before least-squares solve.
+
     rhs (np.ndarray, optional): N-by-K optional user-specified right-hand side for least-squares solve.
 
     Returns:

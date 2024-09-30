@@ -837,7 +837,7 @@ def infer_operators_nl(Shat, U, params, rhs=None):
         p (int): Degree of the polynomial.
         scale (bool): If True, scale data matrix to within [-1, 1] before least-squares solve.
 
-    rhs (np.ndarray, optional): N-by-K optional user-specified right-hand side for least-squares solve.
+    rhs (np.ndarray, optional): K x N optional user-specified right-hand side for least-squares solve.
 
     Returns:
     operators (dict): Inferred operators A, F, N, B, C, P.
